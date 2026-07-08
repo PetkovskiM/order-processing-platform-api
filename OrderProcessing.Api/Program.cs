@@ -19,6 +19,11 @@ namespace OrderProcessing.Api
             if (app.Environment.IsDevelopment())
             {
                 app.MapOpenApi();
+
+                app.UseSwaggerUI(options =>
+                {
+                    options.SwaggerEndpoint("/openapi/v1.json", "Order Processing API v1");
+                });
             }
 
             app.UseHttpsRedirection();

@@ -1,0 +1,12 @@
+﻿using Microsoft.AspNetCore.Mvc;
+
+namespace OrderProcessing.Api.DTOs
+{
+    public class _ : Controller
+    {
+        public IActionResult Index()
+        {
+            return View();
+        }
+    }
+}

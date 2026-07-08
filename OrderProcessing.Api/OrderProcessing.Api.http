@@ -1,6 +1,5 @@
 @OrderProcessing.Api_HostAddress = http://localhost:5138
 
-GET {{OrderProcessing.Api_HostAddress}}/weatherforecast/
+### Health check
+GET {{OrderProcessing.Api_HostAddress}}/api/health
 Accept: application/json
-
-###
