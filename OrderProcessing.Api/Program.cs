@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using OrderProcessing.Api.Services.Customers;
 
 namespace OrderProcessing.Api
 {
@@ -14,8 +15,11 @@ namespace OrderProcessing.Api
             builder.Services.AddControllers();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
+
             builder.Services.AddDbContext<Data.OrderProcessingDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+            builder.Services.AddScoped<ICustomerService, CustomerService>();
 
             var app = builder.Build();
 

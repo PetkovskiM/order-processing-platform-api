@@ -3,3 +3,22 @@
 ### Health check
 GET {{OrderProcessing.Api_HostAddress}}/api/health
 Accept: application/json
+
+### Create customer
+POST {{OrderProcessing.Api_HostAddress}}/api/customers
+Content-Type: application/json
+
+{
+  "firstName": "Mile",
+  "lastName": "Test",
+  "email": "mile.test@example.com",
+  "phoneNumber": "+38970123456"
+}
+
+### Get all customers
+GET {{OrderProcessing.Api_HostAddress}}/api/customers
+Accept: application/json
+
+### Get customer by id
+GET {{OrderProcessing.Api_HostAddress}}/api/customers/1
+Accept: application/json
