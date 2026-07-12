@@ -22,3 +22,59 @@ Accept: application/json
 ### Get customer by id
 GET {{OrderProcessing.Api_HostAddress}}/api/customers/1
 Accept: application/json
+
+### Create product - laptop
+POST {{OrderProcessing.Api_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "sku": "LAPTOP-LEN-001",
+  "name": "Lenovo Laptop",
+  "description": "Business laptop",
+  "price": 800,
+  "stockQuantity": 10
+}
+
+### Create product - mouse
+POST {{OrderProcessing.Api_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "sku": "MOUSE-LOG-001",
+  "name": "Logitech Mouse",
+  "description": "Wireless mouse",
+  "price": 25.99,
+  "stockQuantity": 50
+}
+
+### Get all products
+GET {{OrderProcessing.Api_HostAddress}}/api/products
+Accept: application/json
+
+### Get product by id
+GET {{OrderProcessing.Api_HostAddress}}/api/products/1
+Accept: application/json
+
+### Update product
+PUT {{OrderProcessing.Api_HostAddress}}/api/products/1
+Content-Type: application/json
+
+{
+  "sku": "LAPTOP-LEN-001",
+  "name": "Lenovo ThinkPad Laptop",
+  "description": "Updated business laptop",
+  "price": 850,
+  "stockQuantity": 8
+}
+
+### Create invalid product - negative price
+POST {{OrderProcessing.Api_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "sku": "INVALID-001",
+  "name": "Invalid Product",
+  "description": "This should fail",
+  "price": -10,
+  "stockQuantity": 5
+}

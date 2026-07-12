@@ -1,6 +1,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Services.Customers;
+using OrderProcessing.Api.Services.Products;
 
 namespace OrderProcessing.Api
 {
@@ -20,6 +21,7 @@ namespace OrderProcessing.Api
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
             builder.Services.AddScoped<ICustomerService, CustomerService>();
+            builder.Services.AddScoped<IProductService, ProductService>();
 
             var app = builder.Build();
 
