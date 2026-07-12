@@ -43,5 +43,52 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .IsUnique();
 
         builder.HasIndex(p => p.Name);
+
+        builder.HasData(
+    new Product
+    {
+        Id = 1001,
+        Sku = "LAPTOP-001",
+        Name = "Business Laptop",
+        Description = "Reliable laptop for office and development work.",
+        Price = 899.99m,
+        StockQuantity = 15,
+        CreatedAtUtc = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
+        UpdatedAtUtc = null
+    },
+    new Product
+    {
+        Id = 1002,
+        Sku = "MOUSE-001",
+        Name = "Wireless Mouse",
+        Description = "Ergonomic wireless mouse.",
+        Price = 24.99m,
+        StockQuantity = 100,
+        CreatedAtUtc = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
+        UpdatedAtUtc = null
+    },
+    new Product
+    {
+        Id = 1003,
+        Sku = "KEYBOARD-001",
+        Name = "Mechanical Keyboard",
+        Description = "Mechanical keyboard with backlight.",
+        Price = 79.99m,
+        StockQuantity = 50,
+        CreatedAtUtc = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
+        UpdatedAtUtc = null
+    },
+    new Product
+    {
+        Id = 1004,
+        Sku = "MONITOR-001",
+        Name = "27 Inch Monitor",
+        Description = "27 inch full HD monitor.",
+        Price = 199.99m,
+        StockQuantity = 25,
+        CreatedAtUtc = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
+        UpdatedAtUtc = null
+    }
+);
     }
 }
