@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Customers;
 using OrderProcessing.Api.Services.Products;
 
@@ -24,6 +25,8 @@ namespace OrderProcessing.Api
             builder.Services.AddScoped<IProductService, ProductService>();
 
             var app = builder.Build();
+
+            app.UseGlobalExceptionHandling();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())

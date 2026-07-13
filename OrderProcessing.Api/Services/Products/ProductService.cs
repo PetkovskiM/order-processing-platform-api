@@ -2,6 +2,7 @@
 using OrderProcessing.Api.Data;
 using OrderProcessing.Api.DTOs.Products;
 using OrderProcessing.Api.Entities;
+using OrderProcessing.Api.Exceptions;
 
 namespace OrderProcessing.Api.Services.Products;
 
@@ -25,7 +26,7 @@ public class ProductService : IProductService
 
         if (skuAlreadyExists)
         {
-            throw new InvalidOperationException("A product with this SKU already exists.");
+            throw new ConflictException("A product with this SKU already exists.");
         }
 
         var product = new Product
@@ -67,7 +68,7 @@ public class ProductService : IProductService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<ProductResponse?> GetByIdAsync(
+    public async Task<ProductResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
     {
@@ -85,10 +86,10 @@ public class ProductService : IProductService
                 CreatedAtUtc = p.CreatedAtUtc,
                 UpdatedAtUtc = p.UpdatedAtUtc
             })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken) ?? throw new NotFoundException("Product not found.");
     }
 
-    public async Task<ProductResponse?> UpdateAsync(
+    public async Task<ProductResponse> UpdateAsync(
         int id,
         UpdateProductRequest request,
         CancellationToken cancellationToken = default)
@@ -98,7 +99,7 @@ public class ProductService : IProductService
 
         if (product is null)
         {
-            return null;
+            throw new NotFoundException("Product not found.");
         }
 
         var normalizedSku = request.Sku.Trim().ToUpperInvariant();
@@ -108,7 +109,7 @@ public class ProductService : IProductService
 
         if (skuAlreadyExists)
         {
-            throw new InvalidOperationException("A product with this SKU already exists.");
+            throw new ConflictException("A product with this SKU already exists.");
         }
 
         product.Sku = normalizedSku;

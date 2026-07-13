@@ -20,22 +20,13 @@ public class ProductsController : ControllerBase
         CreateProductRequest request,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var product = await _productService.CreateAsync(request, cancellationToken);
 
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = product.Id },
-                product);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new
-            {
-                message = ex.Message
-            });
-        }
+        var product = await _productService.CreateAsync(request, cancellationToken);
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = product.Id },
+            product);
     }
 
     [HttpGet]
@@ -54,14 +45,6 @@ public class ProductsController : ControllerBase
     {
         var product = await _productService.GetByIdAsync(id, cancellationToken);
 
-        if (product is null)
-        {
-            return NotFound(new
-            {
-                message = $"Product with id {id} was not found."
-            });
-        }
-
         return Ok(product);
     }
 
@@ -71,26 +54,8 @@ public class ProductsController : ControllerBase
         UpdateProductRequest request,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var product = await _productService.UpdateAsync(id, request, cancellationToken);
+        var product = await _productService.UpdateAsync(id, request, cancellationToken);
 
-            if (product is null)
-            {
-                return NotFound(new
-                {
-                    message = $"Product with id {id} was not found."
-                });
-            }
-
-            return Ok(product);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new
-            {
-                message = ex.Message
-            });
-        }
+        return Ok(product);
     }
 }

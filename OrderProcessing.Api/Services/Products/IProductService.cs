@@ -11,11 +11,11 @@ public interface IProductService
     Task<IReadOnlyList<ProductResponse>> GetAllAsync(
         CancellationToken cancellationToken = default);
 
-    Task<ProductResponse?> GetByIdAsync(
+    Task<ProductResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<ProductResponse?> UpdateAsync(
+    Task<ProductResponse> UpdateAsync(
         int id,
         UpdateProductRequest request,
         CancellationToken cancellationToken = default);
