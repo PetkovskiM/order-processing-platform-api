@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Customers;
+using OrderProcessing.Api.Services.Orders;
 using OrderProcessing.Api.Services.Products;
 
 namespace OrderProcessing.Api
@@ -23,6 +24,7 @@ namespace OrderProcessing.Api
 
             builder.Services.AddScoped<ICustomerService, CustomerService>();
             builder.Services.AddScoped<IProductService, ProductService>();
+            builder.Services.AddScoped<IOrderService, OrderService>();
 
             var app = builder.Build();
 
