@@ -20,22 +20,12 @@ public class CustomersController : ControllerBase
         CreateCustomerRequest request,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var customer = await _customerService.CreateAsync(request, cancellationToken);
+        var customer = await _customerService.CreateAsync(request, cancellationToken);
 
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = customer.Id },
-                customer);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new
-            {
-                message = ex.Message
-            });
-        }
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = customer.Id },
+            customer);
     }
 
     [HttpGet]
@@ -53,14 +43,6 @@ public class CustomersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var customer = await _customerService.GetByIdAsync(id, cancellationToken);
-
-        if (customer is null)
-        {
-            return NotFound(new
-            {
-                message = $"Customer with id {id} was not found."
-            });
-        }
 
         return Ok(customer);
     }

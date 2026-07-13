@@ -2,6 +2,7 @@
 using OrderProcessing.Api.Data;
 using OrderProcessing.Api.DTOs.Customers;
 using OrderProcessing.Api.Entities;
+using OrderProcessing.Api.Exceptions;
 
 namespace OrderProcessing.Api.Services.Customers;
 
@@ -25,7 +26,7 @@ public class CustomerService : ICustomerService
 
         if (emailAlreadyExists)
         {
-            throw new InvalidOperationException("A customer with this email already exists.");
+            throw new ConflictException("A customer with this email already exists.");
         }
 
         var customer = new Customer
@@ -64,7 +65,7 @@ public class CustomerService : ICustomerService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<CustomerResponse?> GetByIdAsync(
+    public async Task<CustomerResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
     {
@@ -80,7 +81,7 @@ public class CustomerService : ICustomerService
                 PhoneNumber = c.PhoneNumber,
                 CreatedAtUtc = c.CreatedAtUtc
             })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken) ?? throw new NotFoundException("Customer with id {id} was not found.");
     }
 
     private static CustomerResponse MapToResponse(Customer customer)
