@@ -191,4 +191,68 @@ public class OrderService : IOrderService
                 .ToList()
         };
     }
+
+    public async Task<IReadOnlyList<OrderResponse>> GetAllAsync(
+     CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Orders
+            .AsNoTracking()
+            .OrderByDescending(o => o.CreatedAtUtc)
+            .Select(o => new OrderResponse
+            {
+                Id = o.Id,
+                CustomerId = o.CustomerId,
+                CustomerName = o.Customer.FirstName + " " + o.Customer.LastName,
+                Status = o.Status,
+                TotalAmount = o.TotalAmount,
+                CreatedAtUtc = o.CreatedAtUtc,
+                CompletedAtUtc = o.CompletedAtUtc,
+                CancelledAtUtc = o.CancelledAtUtc,
+                Items = o.Items
+                    .OrderBy(i => i.Id)
+                    .Select(i => new OrderItemResponse
+                    {
+                        ProductId = i.ProductId,
+                        ProductName = i.ProductName,
+                        Quantity = i.Quantity,
+                        UnitPrice = i.UnitPrice,
+                        LineTotal = i.LineTotal
+                    })
+                    .ToList()
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<OrderResponse> GetByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.Id == id)
+            .Select(o => new OrderResponse
+            {
+                Id = o.Id,
+                CustomerId = o.CustomerId,
+                CustomerName = o.Customer.FirstName + " " + o.Customer.LastName,
+                Status = o.Status,
+                TotalAmount = o.TotalAmount,
+                CreatedAtUtc = o.CreatedAtUtc,
+                CompletedAtUtc = o.CompletedAtUtc,
+                CancelledAtUtc = o.CancelledAtUtc,
+                Items = o.Items
+                    .OrderBy(i => i.Id)
+                    .Select(i => new OrderItemResponse
+                    {
+                        ProductId = i.ProductId,
+                        ProductName = i.ProductName,
+                        Quantity = i.Quantity,
+                        UnitPrice = i.UnitPrice,
+                        LineTotal = i.LineTotal
+                    })
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException($"Order with id {id} was not found.");
+    }
 }

@@ -22,6 +22,28 @@ public class OrdersController : ControllerBase
     {
         var order = await _orderService.CreateAsync(request, cancellationToken);
 
-        return Created($"/api/orders/{order.Id}", order);
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = order.Id },
+            order);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<OrderResponse>>> GetAll(
+        CancellationToken cancellationToken)
+    {
+        var orders = await _orderService.GetAllAsync(cancellationToken);
+
+        return Ok(orders);
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<OrderResponse>> GetById(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var order = await _orderService.GetByIdAsync(id, cancellationToken);
+
+        return Ok(order);
     }
 }
