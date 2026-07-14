@@ -54,7 +54,6 @@ public class OrderService : IOrderService
             .ToList();
 
         var products = await _dbContext.Products
-            .AsNoTracking()
             .Where(p => productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, cancellationToken);
 
@@ -68,11 +67,34 @@ public class OrderService : IOrderService
                 $"Products were not found: {string.Join(", ", missingProductIds)}.");
         }
 
+        var insufficientStockItems = request.Items
+            .Where(item => products[item.ProductId].StockQuantity < item.Quantity)
+            .Select(item => new
+            {
+                item.ProductId,
+                ProductName = products[item.ProductId].Name,
+                RequestedQuantity = item.Quantity,
+                AvailableQuantity = products[item.ProductId].StockQuantity
+            })
+            .ToList();
+
+        if (insufficientStockItems.Count > 0)
+        {
+            var details = string.Join(
+                "; ",
+                insufficientStockItems.Select(item =>
+                    $"{item.ProductName} (ProductId: {item.ProductId}) requested: {item.RequestedQuantity}, available: {item.AvailableQuantity}"));
+
+            throw new BadRequestException($"Insufficient stock. {details}");
+        }
+
+        var utcNow = DateTime.UtcNow;
+
         var order = new Order
         {
             CustomerId = customer.Id,
             Status = OrderStatus.Pending,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = utcNow
         };
 
         foreach (var item in request.Items)
@@ -91,6 +113,9 @@ public class OrderService : IOrderService
             });
 
             order.TotalAmount += lineTotal;
+
+            product.StockQuantity -= item.Quantity;
+            product.UpdatedAtUtc = utcNow;
         }
 
         _dbContext.Orders.Add(order);
