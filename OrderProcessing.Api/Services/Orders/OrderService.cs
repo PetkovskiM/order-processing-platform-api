@@ -255,4 +255,138 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"Order with id {id} was not found.");
     }
+
+    public async Task<OrderResponse> CompleteAsync(
+    int id,
+    CancellationToken cancellationToken = default)
+    {
+        var order = await _dbContext.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+            ?? throw new NotFoundException($"Order with id {id} was not found.");
+
+        if (order.Status != OrderStatus.Pending)
+        {
+            throw new BadRequestException(
+                $"Only pending orders can be completed. Current status: {order.Status}.");
+        }
+
+        var utcNow = DateTime.UtcNow;
+
+        var oldValues = JsonSerializer.Serialize(new
+        {
+            order.Id,
+            Status = order.Status.ToString(),
+            order.CompletedAtUtc,
+            order.CancelledAtUtc
+        });
+
+        order.Status = OrderStatus.Completed;
+        order.CompletedAtUtc = utcNow;
+
+        var auditLog = new AuditLog
+        {
+            EntityName = nameof(Order),
+            EntityId = order.Id.ToString(),
+            Action = "Completed",
+            OldValues = oldValues,
+            NewValues = JsonSerializer.Serialize(new
+            {
+                order.Id,
+                Status = order.Status.ToString(),
+                order.CompletedAtUtc,
+                order.CancelledAtUtc
+            }),
+            CreatedAtUtc = utcNow
+        };
+
+        _dbContext.AuditLogs.Add(auditLog);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
+    }
+
+    public async Task<OrderResponse> CancelAsync(
+    int id,
+    CancellationToken cancellationToken = default)
+    {
+        var order = await _dbContext.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+            ?? throw new NotFoundException($"Order with id {id} was not found.");
+
+        if (order.Status != OrderStatus.Pending)
+        {
+            throw new BadRequestException(
+                $"Only pending orders can be cancelled. Current status: {order.Status}.");
+        }
+
+        var productIds = order.Items
+            .Select(i => i.ProductId)
+            .Distinct()
+            .ToList();
+
+        var products = await _dbContext.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        var utcNow = DateTime.UtcNow;
+
+        var oldValues = JsonSerializer.Serialize(new
+        {
+            order.Id,
+            Status = order.Status.ToString(),
+            order.CompletedAtUtc,
+            order.CancelledAtUtc,
+            RestoredStock = order.Items.Select(item => new
+            {
+                item.ProductId,
+                item.ProductName,
+                item.Quantity
+            })
+        });
+
+        foreach (var item in order.Items)
+        {
+            if (products.TryGetValue(item.ProductId, out var product))
+            {
+                product.StockQuantity += item.Quantity;
+                product.UpdatedAtUtc = utcNow;
+            }
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        order.CancelledAtUtc = utcNow;
+
+        var auditLog = new AuditLog
+        {
+            EntityName = nameof(Order),
+            EntityId = order.Id.ToString(),
+            Action = "Cancelled",
+            OldValues = oldValues,
+            NewValues = JsonSerializer.Serialize(new
+            {
+                order.Id,
+                Status = order.Status.ToString(),
+                order.CompletedAtUtc,
+                order.CancelledAtUtc,
+                RestoredStock = order.Items.Select(item => new
+                {
+                    item.ProductId,
+                    item.ProductName,
+                    item.Quantity
+                })
+            }),
+            CreatedAtUtc = utcNow
+        };
+
+        _dbContext.AuditLogs.Add(auditLog);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
+    }
 }

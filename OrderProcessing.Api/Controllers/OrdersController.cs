@@ -46,4 +46,24 @@ public class OrdersController : ControllerBase
 
         return Ok(order);
     }
+
+    [HttpPatch("{id:int}/complete")]
+    public async Task<ActionResult<OrderResponse>> Complete(
+    int id,
+    CancellationToken cancellationToken)
+    {
+        var order = await _orderService.CompleteAsync(id, cancellationToken);
+
+        return Ok(order);
+    }
+
+    [HttpPatch("{id:int}/cancel")]
+    public async Task<ActionResult<OrderResponse>> Cancel(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var order = await _orderService.CancelAsync(id, cancellationToken);
+
+        return Ok(order);
+    }
 }
