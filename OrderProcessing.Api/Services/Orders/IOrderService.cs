@@ -14,4 +14,12 @@ public interface IOrderService
     Task<OrderResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default);
+
+    Task<OrderResponse> CompleteAsync(
+       int id,
+       CancellationToken cancellationToken = default);
+
+    Task<OrderResponse> CancelAsync(
+        int id,
+        CancellationToken cancellationToken = default);
 }
