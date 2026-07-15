@@ -20,78 +20,24 @@ public class OrderService : IOrderService
         CreateOrderRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (request.Items.Count == 0)
-        {
-            throw new BadRequestException("An order must contain at least one item.");
-        }
-
-        var duplicateProductIds = request.Items
-            .GroupBy(i => i.ProductId)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key)
-            .ToList();
-
-        if (duplicateProductIds.Count > 0)
-        {
-            throw new BadRequestException(
-                $"Duplicate products are not allowed in the same order. Product ids: {string.Join(", ", duplicateProductIds)}.");
-        }
+        ValidateCreateOrderRequest(request);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            var customer = await _dbContext.Customers
-                .AsNoTracking()
-                .Where(c => c.Id == request.CustomerId)
-                .Select(c => new
-                {
-                    c.Id,
-                    c.FirstName,
-                    c.LastName
-                })
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? throw new NotFoundException($"Customer with id {request.CustomerId} was not found.");
+            var customer = await GetCustomerSummaryAsync(request.CustomerId, cancellationToken);
 
             var productIds = request.Items
                 .Select(i => i.ProductId)
                 .Distinct()
                 .ToList();
 
-            var products = await _dbContext.Products
-                .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, cancellationToken);
+            var products = await GetProductsByIdAsync(productIds, cancellationToken);
 
-            var missingProductIds = productIds
-                .Where(id => !products.ContainsKey(id))
-                .ToList();
+            ValidateProductsExist(productIds, products);
 
-            if (missingProductIds.Count > 0)
-            {
-                throw new NotFoundException(
-                    $"Products were not found: {string.Join(", ", missingProductIds)}.");
-            }
-
-            var insufficientStockItems = request.Items
-                .Where(item => products[item.ProductId].StockQuantity < item.Quantity)
-                .Select(item => new
-                {
-                    item.ProductId,
-                    ProductName = products[item.ProductId].Name,
-                    RequestedQuantity = item.Quantity,
-                    AvailableQuantity = products[item.ProductId].StockQuantity
-                })
-                .ToList();
-
-            if (insufficientStockItems.Count > 0)
-            {
-                var details = string.Join(
-                    "; ",
-                    insufficientStockItems.Select(item =>
-                        $"{item.ProductName} (ProductId: {item.ProductId}) requested: {item.RequestedQuantity}, available: {item.AvailableQuantity}"));
-
-                throw new BadRequestException($"Insufficient stock. {details}");
-            }
+            ValidateStockAvailability(request.Items, products);
 
             var utcNow = DateTime.UtcNow;
 
@@ -127,32 +73,28 @@ public class OrderService : IOrderService
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            var auditLog = new AuditLog
-            {
-                EntityName = nameof(Order),
-                EntityId = order.Id.ToString(),
-                Action = "Created",
-                OldValues = null,
-                NewValues = JsonSerializer.Serialize(new
-                {
-                    order.Id,
-                    order.CustomerId,
-                    Status = order.Status.ToString(),
-                    order.TotalAmount,
-                    order.CreatedAtUtc,
-                    Items = order.Items.Select(item => new
-                    {
-                        item.ProductId,
-                        item.ProductName,
-                        item.Quantity,
-                        item.UnitPrice,
-                        item.LineTotal
-                    })
-                }),
-                CreatedAtUtc = utcNow
-            };
-
-            _dbContext.AuditLogs.Add(auditLog);
+            AddAuditLog(
+             nameof(Order),
+             order.Id.ToString(),
+             "Created",
+             null,
+             new
+             {
+                 order.Id,
+                 order.CustomerId,
+                 Status = order.Status.ToString(),
+                 order.TotalAmount,
+                 order.CreatedAtUtc,
+                 Items = order.Items.Select(item => new
+                 {
+                     item.ProductId,
+                     item.ProductName,
+                     item.Quantity,
+                     item.UnitPrice,
+                     item.LineTotal
+                 })
+             },
+             utcNow);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -388,5 +330,118 @@ public class OrderService : IOrderService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
+    }
+
+    private static void ValidateCreateOrderRequest(CreateOrderRequest request)
+    {
+        if (request.Items.Count == 0)
+        {
+            throw new BadRequestException("An order must contain at least one item.");
+        }
+
+        var duplicateProductIds = request.Items
+            .GroupBy(i => i.ProductId)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateProductIds.Count > 0)
+        {
+            throw new BadRequestException(
+                $"Duplicate products are not allowed in the same order. Product ids: {string.Join(", ", duplicateProductIds)}.");
+        }
+    }
+
+    private sealed record CustomerSummary(
+    int Id,
+    string FirstName,
+    string LastName);
+
+    private async Task<CustomerSummary> GetCustomerSummaryAsync(
+    int customerId,
+    CancellationToken cancellationToken)
+    {
+        return await _dbContext.Customers
+            .AsNoTracking()
+            .Where(c => c.Id == customerId)
+            .Select(c => new CustomerSummary(
+                c.Id,
+                c.FirstName,
+                c.LastName))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException($"Customer with id {customerId} was not found.");
+    }
+
+    private async Task<Dictionary<int, Product>> GetProductsByIdAsync(
+    IReadOnlyCollection<int> productIds,
+    CancellationToken cancellationToken)
+    {
+        return await _dbContext.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+    }
+
+    private static void ValidateProductsExist(
+    IEnumerable<int> productIds,
+    IReadOnlyDictionary<int, Product> products)
+    {
+        var missingProductIds = productIds
+            .Where(id => !products.ContainsKey(id))
+            .ToList();
+
+        if (missingProductIds.Count > 0)
+        {
+            throw new NotFoundException(
+                $"Products were not found: {string.Join(", ", missingProductIds)}.");
+        }
+    }
+
+    private static void ValidateStockAvailability(
+    IEnumerable<CreateOrderItemRequest> items,
+    IReadOnlyDictionary<int, Product> products)
+    {
+        var insufficientStockItems = items
+            .Where(item => products[item.ProductId].StockQuantity < item.Quantity)
+            .Select(item => new
+            {
+                item.ProductId,
+                ProductName = products[item.ProductId].Name,
+                RequestedQuantity = item.Quantity,
+                AvailableQuantity = products[item.ProductId].StockQuantity
+            })
+            .ToList();
+
+        if (insufficientStockItems.Count == 0)
+        {
+            return;
+        }
+
+        var details = string.Join(
+            "; ",
+            insufficientStockItems.Select(item =>
+                $"{item.ProductName} (ProductId: {item.ProductId}) requested: {item.RequestedQuantity}, available: {item.AvailableQuantity}"));
+
+        throw new BadRequestException($"Insufficient stock. {details}");
+    }
+
+    private void AddAuditLog(
+    string entityName,
+    string entityId,
+    string action,
+    object? oldValues,
+    object? newValues,
+    DateTime createdAtUtc)
+    {
+        var auditLog = new AuditLog
+        {
+            EntityName = entityName,
+            EntityId = entityId,
+            Action = action,
+            OldValues = oldValues is null ? null : JsonSerializer.Serialize(oldValues),
+            NewValues = newValues is null ? null : JsonSerializer.Serialize(newValues),
+            CreatedAtUtc = createdAtUtc
+        };
+
+        _dbContext.AuditLogs.Add(auditLog);
     }
 }
