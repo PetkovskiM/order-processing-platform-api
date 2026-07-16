@@ -1,21 +1,24 @@
-﻿using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Data;
 using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
+using OrderProcessing.Api.Services.Auditing;
+using System.Text.Json;
 
 namespace OrderProcessing.Api.Services.Orders;
 
 public class OrderService : IOrderService
 {
     private readonly OrderProcessingDbContext _dbContext;
+    private readonly IAuditService _auditService;
     private readonly ILogger<OrderService> _logger;
 
-    public OrderService(OrderProcessingDbContext dbContext, ILogger<OrderService> logger)
+    public OrderService(OrderProcessingDbContext dbContext, ILogger<OrderService> logger, IAuditService auditService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _auditService = auditService;
     }
 
     public async Task<OrderResponse> CreateAsync(
@@ -80,28 +83,28 @@ public class OrderService : IOrderService
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            AddAuditLog(
-             nameof(Order),
-             order.Id.ToString(),
-             "Created",
-             null,
-             new
-             {
-                 order.Id,
-                 order.CustomerId,
-                 Status = order.Status.ToString(),
-                 order.TotalAmount,
-                 order.CreatedAtUtc,
-                 Items = order.Items.Select(item => new
-                 {
-                     item.ProductId,
-                     item.ProductName,
-                     item.Quantity,
-                     item.UnitPrice,
-                     item.LineTotal
-                 })
-             },
-             utcNow);
+            _auditService.Add(
+            entityName: nameof(Order),
+            entityId: order.Id.ToString(),
+            action: AuditActions.Created,
+            oldValues: null,
+            newValues: new
+            {
+                order.Id,
+                order.CustomerId,
+                order.Status,
+                order.TotalAmount,
+                order.CreatedAtUtc,
+                Items = order.Items.Select(item => new
+                {
+                    item.ProductId,
+                    item.ProductName,
+                    item.Quantity,
+                    item.UnitPrice,
+                    item.LineTotal
+                })
+            },
+            createdAtUtc: utcNow);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -229,34 +232,30 @@ public class OrderService : IOrderService
 
         var utcNow = DateTime.UtcNow;
 
-        var oldValues = JsonSerializer.Serialize(new
+        var oldValues = new
         {
             order.Id,
-            Status = order.Status.ToString(),
+            order.Status,
             order.CompletedAtUtc,
             order.CancelledAtUtc
-        });
+        };
 
         order.Status = OrderStatus.Completed;
         order.CompletedAtUtc = utcNow;
 
-        var auditLog = new AuditLog
+        _auditService.Add(
+        entityName: nameof(Order),
+        entityId: order.Id.ToString(),
+        action: AuditActions.Completed,
+        oldValues: oldValues,
+        newValues: new
         {
-            EntityName = nameof(Order),
-            EntityId = order.Id.ToString(),
-            Action = "Completed",
-            OldValues = oldValues,
-            NewValues = JsonSerializer.Serialize(new
-            {
-                order.Id,
-                Status = order.Status.ToString(),
-                order.CompletedAtUtc,
-                order.CancelledAtUtc
-            }),
-            CreatedAtUtc = utcNow
-        };
-
-        _dbContext.AuditLogs.Add(auditLog);
+            order.Id,
+            order.Status,
+            order.CompletedAtUtc,
+            order.CancelledAtUtc
+        },
+        createdAtUtc: utcNow);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -294,19 +293,13 @@ public class OrderService : IOrderService
 
         var utcNow = DateTime.UtcNow;
 
-        var oldValues = JsonSerializer.Serialize(new
+        var oldValues = new
         {
             order.Id,
-            Status = order.Status.ToString(),
+            order.Status,
             order.CompletedAtUtc,
-            order.CancelledAtUtc,
-            RestoredStock = order.Items.Select(item => new
-            {
-                item.ProductId,
-                item.ProductName,
-                item.Quantity
-            })
-        });
+            order.CancelledAtUtc
+        };
 
         foreach (var item in order.Items)
         {
@@ -320,29 +313,25 @@ public class OrderService : IOrderService
         order.Status = OrderStatus.Cancelled;
         order.CancelledAtUtc = utcNow;
 
-        var auditLog = new AuditLog
+        _auditService.Add(
+        entityName: nameof(Order),
+        entityId: order.Id.ToString(),
+        action: AuditActions.Cancelled,
+        oldValues: oldValues,
+        newValues: new
         {
-            EntityName = nameof(Order),
-            EntityId = order.Id.ToString(),
-            Action = "Cancelled",
-            OldValues = oldValues,
-            NewValues = JsonSerializer.Serialize(new
+            order.Id,
+            order.Status,
+            order.CompletedAtUtc,
+            order.CancelledAtUtc,
+            RestoredStock = order.Items.Select(item => new
             {
-                order.Id,
-                Status = order.Status.ToString(),
-                order.CompletedAtUtc,
-                order.CancelledAtUtc,
-                RestoredStock = order.Items.Select(item => new
-                {
-                    item.ProductId,
-                    item.ProductName,
-                    item.Quantity
-                })
-            }),
-            CreatedAtUtc = utcNow
-        };
-
-        _dbContext.AuditLogs.Add(auditLog);
+                item.ProductId,
+                item.ProductName,
+                item.Quantity
+            })
+        },
+        createdAtUtc: utcNow);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
