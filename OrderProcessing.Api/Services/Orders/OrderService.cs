@@ -10,16 +10,23 @@ namespace OrderProcessing.Api.Services.Orders;
 public class OrderService : IOrderService
 {
     private readonly OrderProcessingDbContext _dbContext;
+    private readonly ILogger<OrderService> _logger;
 
-    public OrderService(OrderProcessingDbContext dbContext)
+    public OrderService(OrderProcessingDbContext dbContext, ILogger<OrderService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<OrderResponse> CreateAsync(
         CreateOrderRequest request,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation(
+            "Creating order for customer {CustomerId} with {ItemCount} items",
+            request.CustomerId,
+            request.Items.Count);
+
         ValidateCreateOrderRequest(request);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -99,6 +106,12 @@ public class OrderService : IOrderService
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
+
+            _logger.LogInformation(
+             "Order {OrderId} created for customer {CustomerId} with total amount {TotalAmount}",
+             order.Id,
+             order.CustomerId,
+             order.TotalAmount);
 
             return MapToResponse(order, $"{customer.FirstName} {customer.LastName}");
         }
@@ -247,6 +260,10 @@ public class OrderService : IOrderService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        _logger.LogInformation(
+         "Order {OrderId} completed",
+         order.Id);
+
         return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
     }
 
@@ -328,6 +345,10 @@ public class OrderService : IOrderService
         _dbContext.AuditLogs.Add(auditLog);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+         "Order {OrderId} cancelled and stock restored",
+         order.Id);
 
         return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
     }

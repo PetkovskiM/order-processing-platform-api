@@ -4,6 +4,7 @@ using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Customers;
 using OrderProcessing.Api.Services.Orders;
 using OrderProcessing.Api.Services.Products;
+using Serilog;
 
 namespace OrderProcessing.Api
 {
@@ -12,6 +13,14 @@ namespace OrderProcessing.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            builder.Host.UseSerilog((context, services, configuration) =>
+            {
+                configuration
+                    .ReadFrom.Configuration(context.Configuration)
+                    .ReadFrom.Services(services)
+                    .Enrich.FromLogContext();
+            });
 
             // Add services to the container.
 
@@ -28,6 +37,8 @@ namespace OrderProcessing.Api
             builder.Services.AddScoped<IOrderService, OrderService>();
 
             var app = builder.Build();
+
+            app.UseSerilogRequestLogging();
 
             app.UseGlobalExceptionHandling();
 
