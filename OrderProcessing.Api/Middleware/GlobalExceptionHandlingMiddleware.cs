@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using OrderProcessing.Api.Exceptions;
+using OrderProcessing.Api.Extensions;
 
 namespace OrderProcessing.Api.Middleware;
 
@@ -7,13 +9,16 @@ public class GlobalExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionHandlingMiddleware> _logger;
+    private readonly ProblemDetailsFactory _problemDetailsFactory;
 
     public GlobalExceptionHandlingMiddleware(
         RequestDelegate next,
-        ILogger<GlobalExceptionHandlingMiddleware> logger)
+        ILogger<GlobalExceptionHandlingMiddleware> logger,
+        ProblemDetailsFactory problemDetailsFactory)
     {
         _next = next;
         _logger = logger;
+        _problemDetailsFactory = problemDetailsFactory;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -26,38 +31,46 @@ public class GlobalExceptionHandlingMiddleware
         {
             _logger.LogWarning(
                 ex,
-                "Handled API exception occurred. StatusCode: {StatusCode}, Message: {Message}",
+                "Handled API exception. StatusCode: {StatusCode}, ErrorCode: {ErrorCode}",
                 ex.StatusCode,
-                ex.Message);
+                ex.ErrorCode);
 
             await WriteProblemDetailsAsync(
                 context,
                 ex.StatusCode,
                 GetTitle(ex.StatusCode),
-                ex.Message);
+                ex.Message,
+                ex.ErrorCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Unhandled exception occurred while processing the request.");
+                "Unhandled exception occurred while processing {Method} {Path}",
+                context.Request.Method,
+                context.Request.Path);
 
             await WriteProblemDetailsAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
                 "Internal Server Error",
-                "An unexpected error occurred.");
+                "An unexpected error occurred.",
+                ErrorCodes.InternalServerError);
         }
     }
 
-    private static async Task WriteProblemDetailsAsync(
+    private async Task WriteProblemDetailsAsync(
         HttpContext context,
         int statusCode,
         string title,
-        string detail)
+        string detail,
+        string errorCode)
     {
         if (context.Response.HasStarted)
         {
+            _logger.LogWarning(
+                "Cannot write error response because the response has already started.");
+
             return;
         }
 
@@ -65,17 +78,18 @@ public class GlobalExceptionHandlingMiddleware
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/problem+json";
 
-        var problemDetails = new ProblemDetails
-        {
-            Status = statusCode,
-            Title = title,
-            Detail = detail,
-            Instance = context.Request.Path
-        };
+        var problemDetails = _problemDetailsFactory.CreateProblemDetails(
+            context,
+            statusCode: statusCode,
+            title: title,
+            detail: detail,
+            instance: context.Request.Path);
 
-        problemDetails.Extensions["traceId"] = context.TraceIdentifier;
+        problemDetails.AddCommonExtensions(context, errorCode);
 
-        await context.Response.WriteAsJsonAsync(problemDetails);
+        await context.Response.WriteAsJsonAsync(
+            problemDetails,
+            cancellationToken: context.RequestAborted);
     }
 
     private static string GetTitle(int statusCode)

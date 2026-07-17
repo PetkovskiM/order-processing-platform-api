@@ -1,11 +1,9 @@
-﻿using Microsoft.AspNetCore.Http;
-
-namespace OrderProcessing.Api.Exceptions;
+﻿namespace OrderProcessing.Api.Exceptions;
 
 public class NotFoundException : ApiException
 {
-    public NotFoundException(string message)
-        : base(message, StatusCodes.Status404NotFound)
+    public NotFoundException(string message, string errorCode = ErrorCodes.ResourceNotFound)
+        : base(message, StatusCodes.Status404NotFound, errorCode)
     {
     }
 }
