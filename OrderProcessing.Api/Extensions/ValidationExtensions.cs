@@ -1,24 +1,34 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using OrderProcessing.Api.Exceptions;
 
 namespace OrderProcessing.Api.Extensions;
 
 public static class ValidationExtensions
 {
-    public static IServiceCollection AddCustomValidationResponse(this IServiceCollection services)
+    public static IServiceCollection AddCustomValidationResponse(
+        this IServiceCollection services)
     {
         services.Configure<ApiBehaviorOptions>(options =>
         {
             options.InvalidModelStateResponseFactory = context =>
             {
-                var problemDetails = new ValidationProblemDetails(context.ModelState)
-                {
-                    Status = StatusCodes.Status400BadRequest,
-                    Title = "Validation failed",
-                    Detail = "One or more validation errors occurred.",
-                    Instance = context.HttpContext.Request.Path
-                };
+                var problemDetailsFactory =
+                    context.HttpContext.RequestServices
+                        .GetRequiredService<ProblemDetailsFactory>();
 
-                problemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+                var problemDetails =
+                    problemDetailsFactory.CreateValidationProblemDetails(
+                        context.HttpContext,
+                        context.ModelState,
+                        statusCode: StatusCodes.Status400BadRequest,
+                        title: "Validation failed",
+                        detail: "One or more validation errors occurred.",
+                        instance: context.HttpContext.Request.Path);
+
+                problemDetails.AddCommonExtensions(
+                    context.HttpContext,
+                    ErrorCodes.ValidationFailed);
 
                 return new BadRequestObjectResult(problemDetails)
                 {

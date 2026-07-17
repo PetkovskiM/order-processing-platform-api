@@ -227,7 +227,8 @@ public class OrderService : IOrderService
         if (order.Status != OrderStatus.Pending)
         {
             throw new BadRequestException(
-                $"Only pending orders can be completed. Current status: {order.Status}.");
+     $"Only pending orders can be completed. Current status: {order.Status}.",
+            ErrorCodes.InvalidOrderStatus);
         }
 
         var utcNow = DateTime.UtcNow;
@@ -279,7 +280,8 @@ public class OrderService : IOrderService
         if (order.Status != OrderStatus.Pending)
         {
             throw new BadRequestException(
-                $"Only pending orders can be cancelled. Current status: {order.Status}.");
+     $"Only pending orders can be completed. Current status: {order.Status}.",
+            ErrorCodes.InvalidOrderStatus);
         }
 
         var productIds = order.Items
@@ -358,7 +360,8 @@ public class OrderService : IOrderService
         if (duplicateProductIds.Count > 0)
         {
             throw new BadRequestException(
-                $"Duplicate products are not allowed in the same order. Product ids: {string.Join(", ", duplicateProductIds)}.");
+     $"Duplicate products are not allowed. Product ids: {string.Join(", ", duplicateProductIds)}.",
+            ErrorCodes.DuplicateOrderProducts);
         }
     }
 
@@ -431,7 +434,9 @@ public class OrderService : IOrderService
             insufficientStockItems.Select(item =>
                 $"{item.ProductName} (ProductId: {item.ProductId}) requested: {item.RequestedQuantity}, available: {item.AvailableQuantity}"));
 
-        throw new BadRequestException($"Insufficient stock. {details}");
+        throw new BadRequestException(
+  $"Insufficient stock. {details}",
+         ErrorCodes.InsufficientStock);
     }
 
     private void AddAuditLog(
