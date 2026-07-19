@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Services.Orders;
 
@@ -29,10 +30,13 @@ public class OrdersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<OrderResponse>>> GetAll(
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResponse<OrderResponse>>> GetAll(
+     [FromQuery] OrderQueryParameters parameters,
+     CancellationToken cancellationToken)
     {
-        var orders = await _orderService.GetAllAsync(cancellationToken);
+        var orders = await _orderService.GetAllAsync(
+            parameters,
+            cancellationToken);
 
         return Ok(orders);
     }

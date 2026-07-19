@@ -10,4 +10,5 @@ public static class ErrorCodes
     public const string InsufficientStock = "insufficient_stock";
     public const string InvalidOrderStatus = "invalid_order_status";
     public const string DuplicateOrderProducts = "duplicate_order_products";
+    public const string InvalidDateRange = "invalid_date_range";
 }
