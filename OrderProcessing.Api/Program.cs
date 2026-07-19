@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
+using OrderProcessing.Api.Services.Emailing;
 using OrderProcessing.Api.Services.Orders;
 using OrderProcessing.Api.Services.Products;
 using Serilog;
@@ -37,6 +38,7 @@ namespace OrderProcessing.Api
             builder.Services.AddScoped<IProductService, ProductService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IAuditService, AuditService>();
+            builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
 
             var app = builder.Build();
 
