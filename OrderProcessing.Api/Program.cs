@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using OrderProcessing.Api.BackgroundJobs;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
@@ -39,6 +40,10 @@ namespace OrderProcessing.Api
             builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IAuditService, AuditService>();
             builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+            builder.Services.AddSingleton<IEmailQueue>(
+             _ => new EmailQueue(capacity: 100));
+
+            builder.Services.AddHostedService<EmailBackgroundService>();
 
             var app = builder.Build();
 
