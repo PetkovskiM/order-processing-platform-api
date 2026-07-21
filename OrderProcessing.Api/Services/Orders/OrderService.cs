@@ -5,6 +5,8 @@ using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
+using OrderProcessing.Api.Services.Emailing;
+using System.Net.Mail;
 using System.Text.Json;
 
 namespace OrderProcessing.Api.Services.Orders;
@@ -13,13 +15,15 @@ public class OrderService : IOrderService
 {
     private readonly OrderProcessingDbContext _dbContext;
     private readonly IAuditService _auditService;
+    private readonly IEmailQueue _emailQueue;
     private readonly ILogger<OrderService> _logger;
 
-    public OrderService(OrderProcessingDbContext dbContext, ILogger<OrderService> logger, IAuditService auditService)
+    public OrderService(OrderProcessingDbContext dbContext, ILogger<OrderService> logger, IAuditService auditService, IEmailQueue emailQueue)
     {
         _dbContext = dbContext;
         _logger = logger;
         _auditService = auditService;
+        _emailQueue = emailQueue;
     }
 
     public async Task<OrderResponse> CreateAsync(
@@ -116,6 +120,13 @@ public class OrderService : IOrderService
              order.Id,
              order.CustomerId,
              order.TotalAmount);
+
+            var emailMessage = CreateOrderCreatedEmail(order, customer);
+
+            await TryEnqueueEmailAsync(
+                emailMessage,
+                order.Id,
+                cancellationToken);
 
             return MapToResponse(order, $"{customer.FirstName} {customer.LastName}");
         }
@@ -423,7 +434,9 @@ public class OrderService : IOrderService
     private sealed record CustomerSummary(
     int Id,
     string FirstName,
-    string LastName);
+    string LastName,
+    string Email
+    );
 
     private async Task<CustomerSummary> GetCustomerSummaryAsync(
     int customerId,
@@ -435,7 +448,8 @@ public class OrderService : IOrderService
             .Select(c => new CustomerSummary(
                 c.Id,
                 c.FirstName,
-                c.LastName))
+                c.LastName,
+                c.Email))
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"Customer with id {customerId} was not found.");
     }
@@ -548,5 +562,67 @@ public class OrderService : IOrderService
                     .OrderByDescending(order => order.CreatedAtUtc)
                     .ThenByDescending(order => order.Id)
         };
+    }
+
+    private static EmailMessage CreateOrderCreatedEmail(
+    Order order,
+    CustomerSummary customer)
+    {
+        var customerName = $"{customer.FirstName} {customer.LastName}";
+
+        var itemLines = order.Items.Select(item =>
+            $"- {item.ProductName}: {item.Quantity} × {item.UnitPrice:F2} = {item.LineTotal:F2}");
+
+        var body = $"""
+        Hello {customerName},
+
+        Your order #{order.Id} has been created successfully.
+
+        Items:
+        {string.Join(Environment.NewLine, itemLines)}
+
+        Total amount: {order.TotalAmount:F2}
+        Status: {order.Status}
+
+        Thank you.
+        """;
+
+        return new EmailMessage
+        {
+            To = customer.Email,
+            Subject = $"Order #{order.Id} created",
+            Body = body,
+            IsHtml = false
+        };
+    }
+
+    private async Task TryEnqueueEmailAsync(
+    EmailMessage message,
+    int orderId,
+    CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _emailQueue.EnqueueAsync(message, cancellationToken);
+
+            _logger.LogInformation(
+                "Order-created email queued. OrderId: {OrderId}, Recipient: {Recipient}",
+                orderId,
+                message.To);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Order {OrderId} was created, but email enqueueing was cancelled",
+                orderId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Order {OrderId} was created, but its email could not be queued",
+                orderId);
+        }
     }
 }
