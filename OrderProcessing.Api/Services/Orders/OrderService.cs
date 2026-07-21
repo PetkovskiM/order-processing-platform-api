@@ -126,6 +126,7 @@ public class OrderService : IOrderService
             await TryEnqueueEmailAsync(
                 emailMessage,
                 order.Id,
+                "Order Created",
                 cancellationToken);
 
             return MapToResponse(order, $"{customer.FirstName} {customer.LastName}");
@@ -329,6 +330,14 @@ public class OrderService : IOrderService
         _logger.LogInformation(
          "Order {OrderId} completed",
          order.Id);
+
+        var emailMessage = CreateOrderCompletedEmail(order);
+
+        await TryEnqueueEmailAsync(
+            emailMessage,
+            order.Id,
+            emailType: "Order-completed",
+            cancellationToken);
 
         return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
     }
@@ -597,16 +606,18 @@ public class OrderService : IOrderService
     }
 
     private async Task TryEnqueueEmailAsync(
-    EmailMessage message,
-    int orderId,
-    CancellationToken cancellationToken)
+     EmailMessage message,
+     int orderId,
+     string emailType,
+     CancellationToken cancellationToken)
     {
         try
         {
             await _emailQueue.EnqueueAsync(message, cancellationToken);
 
             _logger.LogInformation(
-                "Order-created email queued. OrderId: {OrderId}, Recipient: {Recipient}",
+                "{EmailType} email queued. OrderId: {OrderId}, Recipient: {Recipient}",
+                emailType,
                 orderId,
                 message.To);
         }
@@ -614,15 +625,49 @@ public class OrderService : IOrderService
             when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
-                "Order {OrderId} was created, but email enqueueing was cancelled",
-                orderId);
+                "Order {OrderId} was saved, but enqueueing the {EmailType} email was cancelled",
+                orderId,
+                emailType);
         }
         catch (Exception exception)
         {
             _logger.LogError(
                 exception,
-                "Order {OrderId} was created, but its email could not be queued",
-                orderId);
+                "Order {OrderId} was saved, but its {EmailType} email could not be queued",
+                orderId,
+                emailType);
         }
+    }
+
+    private static EmailMessage CreateOrderCompletedEmail(Order order)
+    {
+        var customerName =
+            $"{order.Customer.FirstName} {order.Customer.LastName}";
+
+        var itemLines = order.Items.Select(item =>
+            $"- {item.ProductName}: {item.Quantity} × {item.UnitPrice:F2} = {item.LineTotal:F2}");
+
+        var body = $"""
+        Hello {customerName},
+
+        Your order #{order.Id} has been completed successfully.
+
+        Items:
+        {string.Join(Environment.NewLine, itemLines)}
+
+        Total amount: {order.TotalAmount:F2}
+        Status: {order.Status}
+        Completed at: {order.CompletedAtUtc:yyyy-MM-dd HH:mm} UTC
+
+        Thank you.
+        """;
+
+        return new EmailMessage
+        {
+            To = order.Customer.Email,
+            Subject = $"Order #{order.Id} completed",
+            Body = body,
+            IsHtml = false
+        };
     }
 }
