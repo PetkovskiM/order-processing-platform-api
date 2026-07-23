@@ -1,3 +1,6 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="OrderProcessing.Api.Tests/OrderProcessing.Api.Tests.csproj" Id="dfe641c8-8c02-461a-a746-f9229f5d179b" />
+  </Folder>
   <Project Path="OrderProcessing.Api/OrderProcessing.Api.csproj" Id="d38b0644-7c76-43b8-a7ec-51d17124f79b" />
 </Solution>
