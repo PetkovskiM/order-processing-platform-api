@@ -45,6 +45,11 @@ namespace OrderProcessing.Api
 
             builder.Services.AddHostedService<EmailBackgroundService>();
 
+            builder.Services.AddMediatR(configuration =>
+            {
+                configuration.RegisterServicesFromAssemblyContaining<Program>();
+            });
+
             var app = builder.Build();
 
             app.UseSerilogRequestLogging();

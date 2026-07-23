@@ -2,6 +2,9 @@
 using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Services.Orders;
+using MediatR;
+using OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
+using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 
 namespace OrderProcessing.Api.Controllers;
 
@@ -10,10 +13,12 @@ namespace OrderProcessing.Api.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
+    private readonly ISender _sender;
 
-    public OrdersController(IOrderService orderService)
+    public OrdersController(IOrderService orderService, ISender sender)
     {
         _orderService = orderService;
+        _sender = sender;
     }
 
     [HttpPost]
@@ -46,7 +51,7 @@ public class OrdersController : ControllerBase
         int id,
         CancellationToken cancellationToken)
     {
-        var order = await _orderService.GetByIdAsync(id, cancellationToken);
+        var order = await _sender.Send(new GetOrderByIdQuery(id), cancellationToken);
 
         return Ok(order);
     }
@@ -56,7 +61,7 @@ public class OrdersController : ControllerBase
     int id,
     CancellationToken cancellationToken)
     {
-        var order = await _orderService.CompleteAsync(id, cancellationToken);
+        var order = await _sender.Send(new CompleteOrderCommand(id), cancellationToken);
 
         return Ok(order);
     }
