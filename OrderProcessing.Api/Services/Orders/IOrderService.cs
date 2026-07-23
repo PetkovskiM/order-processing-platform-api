@@ -13,13 +13,15 @@ public interface IOrderService
     OrderQueryParameters parameters,
     CancellationToken cancellationToken = default);
 
-    Task<OrderResponse> GetByIdAsync(
-        int id,
-        CancellationToken cancellationToken = default);
+    //Prefrleni se vo CQRS
 
-    Task<OrderResponse> CompleteAsync(
-       int id,
-       CancellationToken cancellationToken = default);
+    //Task<OrderResponse> GetByIdAsync(
+    //    int id,
+    //    CancellationToken cancellationToken = default);
+
+    //Task<OrderResponse> CompleteAsync(
+    //   int id,
+    //   CancellationToken cancellationToken = default);
 
     Task<OrderResponse> CancelAsync(
         int id,

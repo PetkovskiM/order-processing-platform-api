@@ -248,99 +248,101 @@ public class OrderService : IOrderService
         };
     }
 
-    public async Task<OrderResponse> GetByIdAsync(
-        int id,
-        CancellationToken cancellationToken = default)
-    {
-        return await _dbContext.Orders
-            .AsNoTracking()
-            .Where(o => o.Id == id)
-            .Select(o => new OrderResponse
-            {
-                Id = o.Id,
-                CustomerId = o.CustomerId,
-                CustomerName = o.Customer.FirstName + " " + o.Customer.LastName,
-                Status = o.Status,
-                TotalAmount = o.TotalAmount,
-                CreatedAtUtc = o.CreatedAtUtc,
-                CompletedAtUtc = o.CompletedAtUtc,
-                CancelledAtUtc = o.CancelledAtUtc,
-                Items = o.Items
-                    .OrderBy(i => i.Id)
-                    .Select(i => new OrderItemResponse
-                    {
-                        ProductId = i.ProductId,
-                        ProductName = i.ProductName,
-                        Quantity = i.Quantity,
-                        UnitPrice = i.UnitPrice,
-                        LineTotal = i.LineTotal
-                    })
-                    .ToList()
-            })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException($"Order with id {id} was not found.");
-    }
+    // Kreirani se GetOrderByIdQuery i CompleteOrderCommand sto se koristat so CQRS i MediatR, zatoa ovie metodi se komentiarani.
+    //public async Task<OrderResponse> GetByIdAsync(
+    //    int id,
+    //    CancellationToken cancellationToken = default)
+    //{
+    //    return await _dbContext.Orders
+    //        .AsNoTracking()
+    //        .Where(o => o.Id == id)
+    //        .Select(o => new OrderResponse
+    //        {
+    //            Id = o.Id,
+    //            CustomerId = o.CustomerId,
+    //            CustomerName = o.Customer.FirstName + " " + o.Customer.LastName,
+    //            Status = o.Status,
+    //            TotalAmount = o.TotalAmount,
+    //            CreatedAtUtc = o.CreatedAtUtc,
+    //            CompletedAtUtc = o.CompletedAtUtc,
+    //            CancelledAtUtc = o.CancelledAtUtc,
+    //            Items = o.Items
+    //                .OrderBy(i => i.Id)
+    //                .Select(i => new OrderItemResponse
+    //                {
+    //                    ProductId = i.ProductId,
+    //                    ProductName = i.ProductName,
+    //                    Quantity = i.Quantity,
+    //                    UnitPrice = i.UnitPrice,
+    //                    LineTotal = i.LineTotal
+    //                })
+    //                .ToList()
+    //        })
+    //        .FirstOrDefaultAsync(cancellationToken)
+    //        ?? throw new NotFoundException($"Order with id {id} was not found.");
+    //}
 
-    public async Task<OrderResponse> CompleteAsync(
-    int id,
-    CancellationToken cancellationToken = default)
-    {
-        var order = await _dbContext.Orders
-            .Include(o => o.Customer)
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
-            ?? throw new NotFoundException($"Order with id {id} was not found.");
 
-        if (order.Status != OrderStatus.Pending)
-        {
-            throw new BadRequestException(
-     $"Only pending orders can be completed. Current status: {order.Status}.",
-            ErrorCodes.InvalidOrderStatus);
-        }
+    //public async Task<OrderResponse> CompleteAsync(
+    //int id,
+    //CancellationToken cancellationToken = default)
+    //{
+    //    var order = await _dbContext.Orders
+    //        .Include(o => o.Customer)
+    //        .Include(o => o.Items)
+    //        .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+    //        ?? throw new NotFoundException($"Order with id {id} was not found.");
 
-        var utcNow = DateTime.UtcNow;
+    //    if (order.Status != OrderStatus.Pending)
+    //    {
+    //        throw new BadRequestException(
+    // $"Only pending orders can be completed. Current status: {order.Status}.",
+    //        ErrorCodes.InvalidOrderStatus);
+    //    }
 
-        var oldValues = new
-        {
-            order.Id,
-            order.Status,
-            order.CompletedAtUtc,
-            order.CancelledAtUtc
-        };
+    //    var utcNow = DateTime.UtcNow;
 
-        order.Status = OrderStatus.Completed;
-        order.CompletedAtUtc = utcNow;
+    //    var oldValues = new
+    //    {
+    //        order.Id,
+    //        order.Status,
+    //        order.CompletedAtUtc,
+    //        order.CancelledAtUtc
+    //    };
 
-        _auditService.Add(
-        entityName: nameof(Order),
-        entityId: order.Id.ToString(),
-        action: AuditActions.Completed,
-        oldValues: oldValues,
-        newValues: new
-        {
-            order.Id,
-            order.Status,
-            order.CompletedAtUtc,
-            order.CancelledAtUtc
-        },
-        createdAtUtc: utcNow);
+    //    order.Status = OrderStatus.Completed;
+    //    order.CompletedAtUtc = utcNow;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+    //    _auditService.Add(
+    //    entityName: nameof(Order),
+    //    entityId: order.Id.ToString(),
+    //    action: AuditActions.Completed,
+    //    oldValues: oldValues,
+    //    newValues: new
+    //    {
+    //        order.Id,
+    //        order.Status,
+    //        order.CompletedAtUtc,
+    //        order.CancelledAtUtc
+    //    },
+    //    createdAtUtc: utcNow);
 
-        _logger.LogInformation(
-         "Order {OrderId} completed",
-         order.Id);
+    //    await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var emailMessage = CreateOrderCompletedEmail(order);
+    //    _logger.LogInformation(
+    //     "Order {OrderId} completed",
+    //     order.Id);
 
-        await TryEnqueueEmailAsync(
-            emailMessage,
-            order.Id,
-            emailType: "Order-completed",
-            cancellationToken);
+    //    var emailMessage = CreateOrderCompletedEmail(order);
 
-        return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
-    }
+    //    await TryEnqueueEmailAsync(
+    //        emailMessage,
+    //        order.Id,
+    //        emailType: "Order-completed",
+    //        cancellationToken);
+
+    //    return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
+    //}
 
     public async Task<OrderResponse> CancelAsync(
     int id,
@@ -517,27 +519,6 @@ public class OrderService : IOrderService
          ErrorCodes.InsufficientStock);
     }
 
-    private void AddAuditLog(
-    string entityName,
-    string entityId,
-    string action,
-    object? oldValues,
-    object? newValues,
-    DateTime createdAtUtc)
-    {
-        var auditLog = new AuditLog
-        {
-            EntityName = entityName,
-            EntityId = entityId,
-            Action = action,
-            OldValues = oldValues is null ? null : JsonSerializer.Serialize(oldValues),
-            NewValues = newValues is null ? null : JsonSerializer.Serialize(newValues),
-            CreatedAtUtc = createdAtUtc
-        };
-
-        _dbContext.AuditLogs.Add(auditLog);
-    }
-
     private static IOrderedQueryable<Order> ApplySorting(
     IQueryable<Order> query,
     OrderSortBy sortBy,
@@ -639,35 +620,36 @@ public class OrderService : IOrderService
         }
     }
 
-    private static EmailMessage CreateOrderCompletedEmail(Order order)
-    {
-        var customerName =
-            $"{order.Customer.FirstName} {order.Customer.LastName}";
+    // Prefreleno vo CompleteOrderCommand
+    //private static EmailMessage CreateOrderCompletedEmail(Order order)
+    //{
+    //    var customerName =
+    //        $"{order.Customer.FirstName} {order.Customer.LastName}";
 
-        var itemLines = order.Items.Select(item =>
-            $"- {item.ProductName}: {item.Quantity} × {item.UnitPrice:F2} = {item.LineTotal:F2}");
+    //    var itemLines = order.Items.Select(item =>
+    //        $"- {item.ProductName}: {item.Quantity} × {item.UnitPrice:F2} = {item.LineTotal:F2}");
 
-        var body = $"""
-        Hello {customerName},
+    //    var body = $"""
+    //    Hello {customerName},
 
-        Your order #{order.Id} has been completed successfully.
+    //    Your order #{order.Id} has been completed successfully.
 
-        Items:
-        {string.Join(Environment.NewLine, itemLines)}
+    //    Items:
+    //    {string.Join(Environment.NewLine, itemLines)}
 
-        Total amount: {order.TotalAmount:F2}
-        Status: {order.Status}
-        Completed at: {order.CompletedAtUtc:yyyy-MM-dd HH:mm} UTC
+    //    Total amount: {order.TotalAmount:F2}
+    //    Status: {order.Status}
+    //    Completed at: {order.CompletedAtUtc:yyyy-MM-dd HH:mm} UTC
 
-        Thank you.
-        """;
+    //    Thank you.
+    //    """;
 
-        return new EmailMessage
-        {
-            To = order.Customer.Email,
-            Subject = $"Order #{order.Id} completed",
-            Body = body,
-            IsHtml = false
-        };
-    }
+    //    return new EmailMessage
+    //    {
+    //        To = order.Customer.Email,
+    //        Subject = $"Order #{order.Id} completed",
+    //        Body = body,
+    //        IsHtml = false
+    //    };
+    //}
 }
