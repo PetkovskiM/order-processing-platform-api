@@ -1,8 +1,4 @@
 <Solution>
-  <Folder Name="/.github/" />
-  <Folder Name="/.github/workflows/">
-    <File Path="ci.yml" />
-  </Folder>
   <Folder Name="/tests/">
     <Project Path="OrderProcessing.Api.Tests/OrderProcessing.Api.Tests.csproj" Id="dfe641c8-8c02-461a-a746-f9229f5d179b" />
   </Folder>
