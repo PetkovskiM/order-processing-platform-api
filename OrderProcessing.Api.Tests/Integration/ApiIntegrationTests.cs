@@ -22,6 +22,30 @@ public sealed class ApiIntegrationTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
+    public async Task TestDatabase_ContainsDedicatedFixtureData()
+    {
+        using var scope = _factory.Services.CreateScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var customerExists = await dbContext.Customers
+            .AsNoTracking()
+            .AnyAsync(
+                customer =>
+                    customer.Id == TestDataSeeder.CustomerId);
+
+        var productExists = await dbContext.Products
+            .AsNoTracking()
+            .AnyAsync(
+                product =>
+                    product.Id == TestDataSeeder.ProductId);
+
+        Assert.True(customerExists);
+        Assert.True(productExists);
+    }
+
+    [Fact]
     public async Task HealthEndpoint_ReturnsOk()
     {
         // Act
@@ -97,18 +121,16 @@ public sealed class ApiIntegrationTests : IClassFixture<CustomWebApplicationFact
     [Fact]
     public async Task CreateOrder_WithValidRequest_CreatesOrderAndReducesStock()
     {
-        const int productId = 1002;
-
-        var stockBefore = await GetProductStockAsync(productId);
+        var stockBefore = await GetProductStockAsync(TestDataSeeder.ProductId);
 
         var request = new CreateOrderRequest
         {
-            CustomerId = 1001,
+            CustomerId = TestDataSeeder.CustomerId,
             Items =
             [
                 new CreateOrderItemRequest
                 {
-                    ProductId = productId,
+                    ProductId = TestDataSeeder.ProductId,
                     Quantity = 1
                 }
             ]
@@ -122,7 +144,7 @@ public sealed class ApiIntegrationTests : IClassFixture<CustomWebApplicationFact
         var createdOrder = await response.Content
             .ReadFromJsonAsync<OrderResponse>();
 
-        var stockAfter = await GetProductStockAsync(productId);
+        var stockAfter = await GetProductStockAsync(TestDataSeeder.ProductId);
 
         // Assert
         Assert.Equal(
@@ -131,7 +153,7 @@ public sealed class ApiIntegrationTests : IClassFixture<CustomWebApplicationFact
 
         Assert.NotNull(createdOrder);
         Assert.True(createdOrder.Id > 0);
-        Assert.Equal(1001, createdOrder.CustomerId);
+        Assert.Equal(TestDataSeeder.CustomerId, createdOrder.CustomerId);
         Assert.Equal(24.99m, createdOrder.TotalAmount);
 
         Assert.Equal(stockBefore - 1, stockAfter);

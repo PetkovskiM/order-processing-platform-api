@@ -66,6 +66,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         dbContext.Database.EnsureCreated();
 
+        TestDataSeeder.Seed(dbContext);
+
         return host;
     }
 
