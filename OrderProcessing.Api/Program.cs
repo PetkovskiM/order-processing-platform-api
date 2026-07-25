@@ -1,6 +1,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.BackgroundJobs;
+using OrderProcessing.Api.Data.Seeding;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
@@ -13,7 +14,7 @@ namespace OrderProcessing.Api
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -50,7 +51,23 @@ namespace OrderProcessing.Api
                 configuration.RegisterServicesFromAssemblyContaining<Program>();
             });
 
+            if (builder.Environment.IsDevelopment())
+            {
+                builder.Services.AddScoped<DevelopmentDataSeeder>();
+            }
+
             var app = builder.Build();
+
+            if (app.Environment.IsDevelopment())
+            {
+                await using var scope = app.Services.CreateAsyncScope();
+            
+                var seeder = scope.ServiceProvider
+                    .GetRequiredService<DevelopmentDataSeeder>();
+            
+                await seeder.SeedAsync();
+            }
+
 
             app.UseSerilogRequestLogging();
 
