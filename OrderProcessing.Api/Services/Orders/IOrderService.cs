@@ -23,7 +23,7 @@ public interface IOrderService
     //   int id,
     //   CancellationToken cancellationToken = default);
 
-    Task<OrderResponse> CancelAsync(
-        int id,
-        CancellationToken cancellationToken = default);
+    //Task<OrderResponse> CancelAsync(
+    //    int id,
+    //    CancellationToken cancellationToken = default);
 }
