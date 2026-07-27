@@ -4,6 +4,7 @@ using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Features.Orders.Commands.CancelOrder;
 using OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
+using OrderProcessing.Api.Features.Orders.Commands.CreateOrder;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrders;
 using OrderProcessing.Api.Services.Orders;
@@ -14,12 +15,10 @@ namespace OrderProcessing.Api.Controllers;
 [Route("api/[controller]")]
 public class OrdersController : ControllerBase
 {
-    private readonly IOrderService _orderService;
     private readonly ISender _sender;
 
     public OrdersController(IOrderService orderService, ISender sender)
     {
-        _orderService = orderService;
         _sender = sender;
     }
 
@@ -28,7 +27,7 @@ public class OrdersController : ControllerBase
         CreateOrderRequest request,
         CancellationToken cancellationToken)
     {
-        var order = await _orderService.CreateAsync(request, cancellationToken);
+        var order = await _sender.Send(new CreateOrderCommand(request), cancellationToken);
 
         return CreatedAtAction(
             nameof(GetById),
@@ -41,9 +40,7 @@ public class OrdersController : ControllerBase
      [FromQuery] OrderQueryParameters parameters,
      CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(
-       new GetOrdersQuery(parameters),
-       cancellationToken);
+        var result = await _sender.Send(new GetOrdersQuery(parameters), cancellationToken);
 
         return Ok(result);
     }
