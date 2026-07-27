@@ -19,6 +19,8 @@ namespace OrderProcessing.Api.Data
 
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+        public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
