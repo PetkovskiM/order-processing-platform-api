@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OrderProcessing.Api\OrderProcessing.Api.csproj" />
+    <ProjectReference Include="..\OrderProcessing.Contracts\OrderProcessing.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
