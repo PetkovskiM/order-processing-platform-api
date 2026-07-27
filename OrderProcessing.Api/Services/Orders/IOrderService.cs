@@ -9,11 +9,11 @@ public interface IOrderService
         CreateOrderRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<PagedResponse<OrderResponse>> GetAllAsync(
-    OrderQueryParameters parameters,
-    CancellationToken cancellationToken = default);
-
     //Prefrleni se vo CQRS
+
+    //Task<PagedResponse<OrderResponse>> GetAllAsync(
+    //OrderQueryParameters parameters,
+    //CancellationToken cancellationToken = default);
 
     //Task<OrderResponse> GetByIdAsync(
     //    int id,

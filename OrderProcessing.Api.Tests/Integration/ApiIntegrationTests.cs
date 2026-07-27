@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OrderProcessing.Api.Data;
+using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Services.Auditing;
@@ -63,6 +64,86 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
             stockAfterCancellation);
     }
 
+
+    [Fact]
+    public async Task GetOrders_ReturnsPagedResponse()
+    {
+        // Arrange
+        await CreateTestOrderAsync();
+        await CreateTestOrderAsync();
+        await CreateTestOrderAsync();
+
+        // Act
+        var response = await Client.GetAsync(
+            "/api/orders?page=1&pageSize=2");
+
+        var result = await response.Content
+            .ReadFromJsonAsync<PagedResponse<OrderResponse>>();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Items.Count);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(2, result.PageSize);
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(2, result.TotalPages);
+        Assert.False(result.HasPreviousPage);
+        Assert.True(result.HasNextPage);
+    }
+
+    [Fact]
+    public async Task GetOrders_WhenCustomerFilterProvided_ReturnsOnlyMatchingOrders()
+    {
+        // Arrange
+        await CreateTestOrderAsync(
+            customerId: TestDataSeeder.CustomerId);
+
+        await CreateTestOrderAsync(
+            customerId: TestDataSeeder.SecondCustomerId);
+
+        // Act
+        var response = await Client.GetAsync(
+            $"/api/orders?customerId={TestDataSeeder.SecondCustomerId}");
+
+        var result = await response.Content
+            .ReadFromJsonAsync<PagedResponse<OrderResponse>>();
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        Assert.NotNull(result);
+        Assert.Single(result.Items);
+
+        Assert.All(
+            result.Items,
+            order => Assert.Equal(
+                TestDataSeeder.SecondCustomerId,
+                order.CustomerId));
+    }
+
+    [Fact]
+    public async Task GetOrders_WithInvalidDateRange_ReturnsBadRequest()
+    {
+        // Act
+        var response = await Client.GetAsync(
+            "/api/orders" +
+            "?createdFromUtc=2026-07-20T00:00:00Z" +
+            "&createdToUtc=2026-07-10T00:00:00Z");
+
+        var body = await response.Content
+            .ReadFromJsonAsync<JsonElement>();
+
+        // Assert
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            response.StatusCode);
+
+        Assert.Equal(
+            "invalid_date_range",
+            body.GetProperty("errorCode").GetString());
+    }
 
     [Fact]
     public async Task CompleteOrder_UpdatesStatusAndCreatesAuditLog()
@@ -266,11 +347,12 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
     }
 
     private async Task<OrderResponse> CreateTestOrderAsync(
-    int quantity = 1)
+    int quantity = 1,
+    int customerId = TestDataSeeder.CustomerId)
     {
         var request = new CreateOrderRequest
         {
-            CustomerId = TestDataSeeder.CustomerId,
+            CustomerId = customerId,
             Items =
             [
                 new CreateOrderItemRequest
