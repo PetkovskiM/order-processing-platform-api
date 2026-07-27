@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
+using OrderProcessing.Api.Features.Orders.Commands.CancelOrder;
 using OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrders;
@@ -72,7 +73,7 @@ public class OrdersController : ControllerBase
         int id,
         CancellationToken cancellationToken)
     {
-        var order = await _orderService.CancelAsync(id, cancellationToken);
+        var order = await _sender.Send(new CancelOrderCommand(id),cancellationToken);
 
         return Ok(order);
     }

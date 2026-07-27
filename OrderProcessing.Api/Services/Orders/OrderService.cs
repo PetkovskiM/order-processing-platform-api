@@ -345,82 +345,82 @@ public class OrderService : IOrderService
     //    return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
     //}
 
-    public async Task<OrderResponse> CancelAsync(
-    int id,
-    CancellationToken cancellationToken = default)
-    {
-        var order = await _dbContext.Orders
-            .Include(o => o.Customer)
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
-            ?? throw new NotFoundException($"Order with id {id} was not found.");
+    //public async Task<OrderResponse> CancelAsync(
+    //int id,
+    //CancellationToken cancellationToken = default)
+    //{
+    //    var order = await _dbContext.Orders
+    //        .Include(o => o.Customer)
+    //        .Include(o => o.Items)
+    //        .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+    //        ?? throw new NotFoundException($"Order with id {id} was not found.");
 
-        if (order.Status != OrderStatus.Pending)
-        {
-            throw new BadRequestException(
-     $"Only pending orders can be completed. Current status: {order.Status}.",
-            ErrorCodes.InvalidOrderStatus);
-        }
+    //    if (order.Status != OrderStatus.Pending)
+    //    {
+    //        throw new BadRequestException(
+    // $"Only pending orders can be completed. Current status: {order.Status}.",
+    //        ErrorCodes.InvalidOrderStatus);
+    //    }
 
-        var productIds = order.Items
-            .Select(i => i.ProductId)
-            .Distinct()
-            .ToList();
+    //    var productIds = order.Items
+    //        .Select(i => i.ProductId)
+    //        .Distinct()
+    //        .ToList();
 
-        var products = await _dbContext.Products
-            .Where(p => productIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, cancellationToken);
+    //    var products = await _dbContext.Products
+    //        .Where(p => productIds.Contains(p.Id))
+    //        .ToDictionaryAsync(p => p.Id, cancellationToken);
 
-        var utcNow = DateTime.UtcNow;
+    //    var utcNow = DateTime.UtcNow;
 
-        var oldValues = new
-        {
-            order.Id,
-            order.Status,
-            order.CompletedAtUtc,
-            order.CancelledAtUtc
-        };
+    //    var oldValues = new
+    //    {
+    //        order.Id,
+    //        order.Status,
+    //        order.CompletedAtUtc,
+    //        order.CancelledAtUtc
+    //    };
 
-        foreach (var item in order.Items)
-        {
-            if (products.TryGetValue(item.ProductId, out var product))
-            {
-                product.StockQuantity += item.Quantity;
-                product.UpdatedAtUtc = utcNow;
-            }
-        }
+    //    foreach (var item in order.Items)
+    //    {
+    //        if (products.TryGetValue(item.ProductId, out var product))
+    //        {
+    //            product.StockQuantity += item.Quantity;
+    //            product.UpdatedAtUtc = utcNow;
+    //        }
+    //    }
 
-        order.Status = OrderStatus.Cancelled;
-        order.CancelledAtUtc = utcNow;
+    //    order.Status = OrderStatus.Cancelled;
+    //    order.CancelledAtUtc = utcNow;
 
-        _auditService.Add(
-        entityName: nameof(Order),
-        entityId: order.Id.ToString(),
-        action: AuditActions.Cancelled,
-        oldValues: oldValues,
-        newValues: new
-        {
-            order.Id,
-            order.Status,
-            order.CompletedAtUtc,
-            order.CancelledAtUtc,
-            RestoredStock = order.Items.Select(item => new
-            {
-                item.ProductId,
-                item.ProductName,
-                item.Quantity
-            })
-        },
-        createdAtUtc: utcNow);
+    //    _auditService.Add(
+    //    entityName: nameof(Order),
+    //    entityId: order.Id.ToString(),
+    //    action: AuditActions.Cancelled,
+    //    oldValues: oldValues,
+    //    newValues: new
+    //    {
+    //        order.Id,
+    //        order.Status,
+    //        order.CompletedAtUtc,
+    //        order.CancelledAtUtc,
+    //        RestoredStock = order.Items.Select(item => new
+    //        {
+    //            item.ProductId,
+    //            item.ProductName,
+    //            item.Quantity
+    //        })
+    //    },
+    //    createdAtUtc: utcNow);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+    //    await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
-         "Order {OrderId} cancelled and stock restored",
-         order.Id);
+    //    _logger.LogInformation(
+    //     "Order {OrderId} cancelled and stock restored",
+    //     order.Id);
 
-        return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
-    }
+    //    return MapToResponse(order, $"{order.Customer.FirstName} {order.Customer.LastName}");
+    //}
 
     private static void ValidateCreateOrderRequest(CreateOrderRequest request)
     {

@@ -374,4 +374,99 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
             ?? throw new InvalidOperationException(
                 "The create-order response was empty.");
     }
+
+
+    [Fact]
+    public async Task CancelOrder_CreatesCancellationAuditLog()
+    {
+        // Arrange
+        var createdOrder = await CreateTestOrderAsync(quantity: 2);
+
+        // Act
+        var response = await Client.PatchAsync(
+            $"/api/orders/{createdOrder.Id}/cancel",
+            content: null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = Factory.Services.CreateScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var auditLog = await dbContext.AuditLogs
+            .AsNoTracking()
+            .SingleOrDefaultAsync(audit =>
+                audit.EntityName == nameof(Order) &&
+                audit.EntityId == createdOrder.Id.ToString() &&
+                audit.Action == AuditActions.Cancelled);
+
+        Assert.NotNull(auditLog);
+        Assert.NotNull(auditLog.OldValues);
+        Assert.NotNull(auditLog.NewValues);
+    }
+
+
+    [Fact]
+    public async Task CancelOrder_WhenOrderIsCompleted_ReturnsInvalidStatusError()
+    {
+        // Arrange
+        var createdOrder = await CreateTestOrderAsync();
+
+        var completeResponse = await Client.PatchAsync(
+            $"/api/orders/{createdOrder.Id}/complete",
+            content: null);
+
+        completeResponse.EnsureSuccessStatusCode();
+
+        var stockBeforeCancellationAttempt =
+            await GetProductStockAsync(TestDataSeeder.ProductId);
+
+        // Act
+        var response = await Client.PatchAsync(
+            $"/api/orders/{createdOrder.Id}/cancel",
+            content: null);
+
+        var body = await response.Content
+            .ReadFromJsonAsync<JsonElement>();
+
+        var stockAfterCancellationAttempt =
+            await GetProductStockAsync(TestDataSeeder.ProductId);
+
+        // Assert
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            response.StatusCode);
+
+        Assert.Equal(
+            "invalid_order_status",
+            body.GetProperty("errorCode").GetString());
+
+        Assert.Equal(
+            stockBeforeCancellationAttempt,
+            stockAfterCancellationAttempt);
+    }
+
+
+    [Fact]
+    public async Task CancelOrder_WhenOrderDoesNotExist_ReturnsNotFound()
+    {
+        // Act
+        var response = await Client.PatchAsync(
+            "/api/orders/999999/cancel",
+            content: null);
+
+        var body = await response.Content
+            .ReadFromJsonAsync<JsonElement>();
+
+        // Assert
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            response.StatusCode);
+
+        Assert.Equal(
+            "resource_not_found",
+            body.GetProperty("errorCode").GetString());
+    }
 }
