@@ -7,7 +7,6 @@ using OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
 using OrderProcessing.Api.Features.Orders.Commands.CreateOrder;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrders;
-using OrderProcessing.Api.Services.Orders;
 
 namespace OrderProcessing.Api.Controllers;
 
@@ -17,7 +16,7 @@ public class OrdersController : ControllerBase
 {
     private readonly ISender _sender;
 
-    public OrdersController(IOrderService orderService, ISender sender)
+    public OrdersController(ISender sender)
     {
         _sender = sender;
     }

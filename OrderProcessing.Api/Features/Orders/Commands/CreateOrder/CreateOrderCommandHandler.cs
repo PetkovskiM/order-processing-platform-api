@@ -6,7 +6,6 @@ using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Emailing;
-using OrderProcessing.Api.Services.Orders;
 
 namespace OrderProcessing.Api.Features.Orders.Commands.CreateOrder;
 

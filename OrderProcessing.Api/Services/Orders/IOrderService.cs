@@ -1,29 +1,31 @@
-﻿using OrderProcessing.Api.DTOs.Common;
-using OrderProcessing.Api.DTOs.Orders;
+﻿
+//[Obsolete("This service is deprecated. Use CQRS commands and queries instead.")]
 
-namespace OrderProcessing.Api.Services.Orders;
 
-public interface IOrderService
-{
-    Task<OrderResponse> CreateAsync(
-        CreateOrderRequest request,
-        CancellationToken cancellationToken = default);
+//using OrderProcessing.Api.DTOs.Common;
+//using OrderProcessing.Api.DTOs.Orders;
 
-    //Prefrleni se vo CQRS
+//namespace OrderProcessing.Api.Services.Orders;
 
-    //Task<PagedResponse<OrderResponse>> GetAllAsync(
-    //OrderQueryParameters parameters,
-    //CancellationToken cancellationToken = default);
+//public interface IOrderService
+//{
+//    Task<OrderResponse> CreateAsync(
+//        CreateOrderRequest request,
+//        CancellationToken cancellationToken = default);
 
-    //Task<OrderResponse> GetByIdAsync(
-    //    int id,
-    //    CancellationToken cancellationToken = default);
+//    Task<PagedResponse<OrderResponse>> GetAllAsync(
+//    OrderQueryParameters parameters,
+//    CancellationToken cancellationToken = default);
 
-    //Task<OrderResponse> CompleteAsync(
-    //   int id,
-    //   CancellationToken cancellationToken = default);
+//    Task<OrderResponse> GetByIdAsync(
+//        int id,
+//        CancellationToken cancellationToken = default);
 
-    //Task<OrderResponse> CancelAsync(
-    //    int id,
-    //    CancellationToken cancellationToken = default);
-}
+//    Task<OrderResponse> CompleteAsync(
+//       int id,
+//       CancellationToken cancellationToken = default);
+
+//    Task<OrderResponse> CancelAsync(
+//        int id,
+//        CancellationToken cancellationToken = default);
+//}
