@@ -6,6 +6,8 @@ using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Emailing;
+using OrderProcessing.Api.Services.Outbox;
+using OrderProcessing.Contracts.Orders;
 
 namespace OrderProcessing.Api.Features.Orders.Commands.CreateOrder;
 
@@ -15,17 +17,20 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
     private readonly IAuditService _auditService;
     private readonly IEmailQueue _emailQueue;
     private readonly ILogger<CreateOrderCommandHandler> _logger;
+    private readonly IOutboxWriter _outboxWriter;
 
     public CreateOrderCommandHandler(
         OrderProcessingDbContext dbContext,
         IAuditService auditService,
         IEmailQueue emailQueue,
-        ILogger<CreateOrderCommandHandler> logger)
+        ILogger<CreateOrderCommandHandler> logger,
+        IOutboxWriter outboxWriter)
     {
         _dbContext = dbContext;
         _auditService = auditService;
         _emailQueue = emailQueue;
         _logger = logger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<OrderResponse> Handle(CreateOrderCommand command, CancellationToken cancellationToken)
@@ -112,6 +117,10 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
                 })
             },
             createdAtUtc: utcNow);
+
+            var integrationEvent = CreateOrderCreatedIntegrationEvent(order, customer);
+
+            _outboxWriter.Add(integrationEvent);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -328,5 +337,29 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
                 orderId,
                 emailType);
         }
+    }
+
+    private static OrderCreatedIntegrationEvent CreateOrderCreatedIntegrationEvent(Order order, CustomerSummary customer)
+    {
+        return new OrderCreatedIntegrationEvent(
+            MessageId: Guid.NewGuid(),
+            OccurredAtUtc: order.CreatedAtUtc,
+            OrderId: order.Id,
+            CustomerId: order.CustomerId,
+            CustomerName:
+                $"{customer.FirstName} {customer.LastName}",
+            CustomerEmail: customer.Email,
+            TotalAmount: order.TotalAmount,
+            CreatedAtUtc: order.CreatedAtUtc,
+            Items: order.Items
+                .OrderBy(item => item.Id)
+                .Select(item =>
+                    new OrderItemIntegrationModel(
+                        ProductId: item.ProductId,
+                        ProductName: item.ProductName,
+                        Quantity: item.Quantity,
+                        UnitPrice: item.UnitPrice,
+                        LineTotal: item.LineTotal))
+                .ToArray());
     }
 }
