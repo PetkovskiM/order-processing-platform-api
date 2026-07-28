@@ -6,6 +6,7 @@ using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Tests.Infrastructure;
+using OrderProcessing.Contracts.Orders;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -468,5 +469,115 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
         Assert.Equal(
             "resource_not_found",
             body.GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task CreateOrder_PersistsOrderCreatedEventInOutbox()
+    {
+        // Arrange and Act
+        var createdOrder = await CreateTestOrderAsync(quantity: 2);
+
+        // Assert
+        await using var scope = Factory.Services.CreateAsyncScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var messages = await dbContext.OutboxMessages
+            .AsNoTracking()
+            .Where(message =>
+                message.Type == typeof(OrderCreatedIntegrationEvent).FullName)
+            .ToListAsync();
+
+        var storedMessage = Assert.Single(messages);
+
+        Assert.Null(storedMessage.ProcessedAtUtc);
+        Assert.Equal(0, storedMessage.RetryCount);
+        Assert.Null(storedMessage.LastAttemptAtUtc);
+        Assert.Null(storedMessage.LastError);
+
+        var orderExists = await dbContext.Orders
+        .AsNoTracking()
+        .AnyAsync(order =>
+         order.Id == createdOrder.Id);
+
+        Assert.True(orderExists);
+
+        var integrationEvent =
+            JsonSerializer.Deserialize<OrderCreatedIntegrationEvent>(
+                storedMessage.Payload,
+                new JsonSerializerOptions(
+                    JsonSerializerDefaults.Web));
+
+        Assert.NotNull(integrationEvent);
+
+        Assert.Equal(
+            storedMessage.Id,
+            integrationEvent.MessageId);
+
+        Assert.Equal(
+            createdOrder.Id,
+            integrationEvent.OrderId);
+
+        Assert.Equal(
+            TestDataSeeder.CustomerId,
+            integrationEvent.CustomerId);
+
+        Assert.Equal(
+            createdOrder.TotalAmount,
+            integrationEvent.TotalAmount);
+
+        var item = Assert.Single(integrationEvent.Items);
+
+        Assert.Equal(
+            TestDataSeeder.ProductId,
+            item.ProductId);
+
+        Assert.Equal(2, item.Quantity);
+    }
+
+
+    [Fact]
+    public async Task CreateOrder_WhenCustomerDoesNotExist_DoesNotCreateOutboxMessage()
+    {
+        // Arrange
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 999999,
+            Items =
+            [
+                new CreateOrderItemRequest
+            {
+                ProductId = TestDataSeeder.ProductId,
+                Quantity = 1
+            }
+            ]
+        };
+
+        // Act
+        var response = await Client.PostAsJsonAsync(
+            "/api/orders",
+            request);
+
+        // Assert
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            response.StatusCode);
+
+        await using var scope =
+            Factory.Services.CreateAsyncScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var outboxMessageCount =
+            await dbContext.OutboxMessages.CountAsync();
+
+        Assert.Equal(0, outboxMessageCount);
+
+        var orderCount =
+            await dbContext.Orders.CountAsync();
+
+        Assert.Equal(0, orderCount);
     }
 }
