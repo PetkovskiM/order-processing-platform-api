@@ -5,6 +5,8 @@ using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
+using OrderProcessing.Api.Services.Outbox;
+using OrderProcessing.Contracts.Orders;
 
 namespace OrderProcessing.Api.Features.Orders.Commands.CancelOrder;
 
@@ -14,14 +16,18 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
     private readonly IAuditService _auditService;
     private readonly ILogger<CancelOrderCommandHandler> _logger;
 
+    private readonly IOutboxWriter _outboxWriter;
+
     public CancelOrderCommandHandler(
         OrderProcessingDbContext dbContext,
         IAuditService auditService,
-        ILogger<CancelOrderCommandHandler> logger)
+        ILogger<CancelOrderCommandHandler> logger,
+        IOutboxWriter outboxWriter)
     {
         _dbContext = dbContext;
         _auditService = auditService;
         _logger = logger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<OrderResponse> Handle(
@@ -78,6 +84,10 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
             },
             createdAtUtc: utcNow);
 
+        var integrationEvent = CreateOrderCancelledIntegrationEvent(order, utcNow);
+
+        _outboxWriter.Add(integrationEvent);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
@@ -112,5 +122,19 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
                 })
                 .ToList()
         };
+    }
+
+    private static OrderCancelledIntegrationEvent CreateOrderCancelledIntegrationEvent(Order order, DateTime cancelledAtUtc)
+    {
+        return new OrderCancelledIntegrationEvent(
+            MessageId: Guid.NewGuid(),
+            OccurredAtUtc: cancelledAtUtc,
+            OrderId: order.Id,
+            CustomerId: order.CustomerId,
+            CustomerName:
+                $"{order.Customer.FirstName} {order.Customer.LastName}",
+            CustomerEmail: order.Customer.Email,
+            TotalAmount: order.TotalAmount,
+            CancelledAtUtc: cancelledAtUtc);
     }
 }

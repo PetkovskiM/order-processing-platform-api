@@ -6,6 +6,8 @@ using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Emailing;
+using OrderProcessing.Api.Services.Outbox;
+using OrderProcessing.Contracts.Orders;
 
 namespace OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
 
@@ -16,17 +18,20 @@ public sealed class CompleteOrderCommandHandler
     private readonly IAuditService _auditService;
     private readonly IEmailQueue _emailQueue;
     private readonly ILogger<CompleteOrderCommandHandler> _logger;
+    private readonly IOutboxWriter _outboxWriter;
 
     public CompleteOrderCommandHandler(
         OrderProcessingDbContext dbContext,
         IAuditService auditService,
         IEmailQueue emailQueue,
-        ILogger<CompleteOrderCommandHandler> logger)
+        ILogger<CompleteOrderCommandHandler> logger,
+        IOutboxWriter outboxWriter)
     {
         _dbContext = dbContext;
         _auditService = auditService;
         _emailQueue = emailQueue;
         _logger = logger;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<OrderResponse> Handle(
@@ -39,8 +44,7 @@ public sealed class CompleteOrderCommandHandler
             .FirstOrDefaultAsync(
                 order => order.Id == request.OrderId,
                 cancellationToken)
-            ?? throw new NotFoundException(
-                $"Order with id {request.OrderId} was not found.");
+            ?? throw new NotFoundException( $"Order with id {request.OrderId} was not found.");
 
         if (order.Status != OrderStatus.Pending)
         {
@@ -76,11 +80,13 @@ public sealed class CompleteOrderCommandHandler
             },
             createdAtUtc: utcNow);
 
+        var integrationEvent = CreateOrderCompletedIntegrationEvent(order, utcNow);
+
+        _outboxWriter.Add(integrationEvent);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "Order {OrderId} completed",
-            order.Id);
+        _logger.LogInformation( "Order {OrderId} completed", order.Id);
 
         var emailMessage = CreateOrderCompletedEmail(order);
 
@@ -186,5 +192,18 @@ public sealed class CompleteOrderCommandHandler
                 })
                 .ToList()
         };
+    }
+
+    private static OrderCompletedIntegrationEvent CreateOrderCompletedIntegrationEvent(Order order, DateTime completedAtUtc)
+    {
+        return new OrderCompletedIntegrationEvent(
+            MessageId: Guid.NewGuid(),
+            OccurredAtUtc: completedAtUtc,
+            OrderId: order.Id,
+            CustomerId: order.CustomerId,
+            CustomerName: $"{order.Customer.FirstName} {order.Customer.LastName}",
+            CustomerEmail: order.Customer.Email,
+            TotalAmount: order.TotalAmount,
+            CompletedAtUtc: completedAtUtc);
     }
 }
