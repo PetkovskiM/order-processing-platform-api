@@ -580,4 +580,122 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
 
         Assert.Equal(0, orderCount);
     }
+
+
+    [Fact]
+    public async Task CompleteOrder_PersistsOrderCompletedEventInOutbox()
+    {
+        // Arrange
+        var createdOrder = await CreateTestOrderAsync();
+
+        // Act
+        var response = await Client.PatchAsync(
+            $"/api/orders/{createdOrder.Id}/complete",
+            content: null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var scope =
+            Factory.Services.CreateAsyncScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var storedMessage = await dbContext.OutboxMessages
+            .AsNoTracking()
+            .SingleAsync(message =>
+                message.Type ==
+                typeof(OrderCompletedIntegrationEvent).FullName);
+
+        Assert.Null(storedMessage.ProcessedAtUtc);
+        Assert.Equal(0, storedMessage.RetryCount);
+
+        var integrationEvent =
+            JsonSerializer.Deserialize<OrderCompletedIntegrationEvent>(
+                storedMessage.Payload,
+                new JsonSerializerOptions(
+                    JsonSerializerDefaults.Web));
+
+        Assert.NotNull(integrationEvent);
+
+        Assert.Equal(
+            storedMessage.Id,
+            integrationEvent.MessageId);
+
+        Assert.Equal(
+            createdOrder.Id,
+            integrationEvent.OrderId);
+
+        Assert.Equal(
+            TestDataSeeder.CustomerId,
+            integrationEvent.CustomerId);
+
+        Assert.Equal(
+            createdOrder.TotalAmount,
+            integrationEvent.TotalAmount);
+
+        Assert.NotEqual(
+            default,
+            integrationEvent.CompletedAtUtc);
+    }
+
+    [Fact]
+    public async Task CancelOrder_PersistsOrderCancelledEventInOutbox()
+    {
+        // Arrange
+        var createdOrder =
+            await CreateTestOrderAsync(quantity: 2);
+
+        // Act
+        var response = await Client.PatchAsync(
+            $"/api/orders/{createdOrder.Id}/cancel",
+            content: null);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var scope =
+            Factory.Services.CreateAsyncScope();
+
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<OrderProcessingDbContext>();
+
+        var storedMessage = await dbContext.OutboxMessages
+            .AsNoTracking()
+            .SingleAsync(message =>
+                message.Type ==
+                typeof(OrderCancelledIntegrationEvent).FullName);
+
+        Assert.Null(storedMessage.ProcessedAtUtc);
+        Assert.Equal(0, storedMessage.RetryCount);
+
+        var integrationEvent =
+            JsonSerializer.Deserialize<OrderCancelledIntegrationEvent>(
+                storedMessage.Payload,
+                new JsonSerializerOptions(
+                    JsonSerializerDefaults.Web));
+
+        Assert.NotNull(integrationEvent);
+
+        Assert.Equal(
+            storedMessage.Id,
+            integrationEvent.MessageId);
+
+        Assert.Equal(
+            createdOrder.Id,
+            integrationEvent.OrderId);
+
+        Assert.Equal(
+            TestDataSeeder.CustomerId,
+            integrationEvent.CustomerId);
+
+        Assert.Equal(
+            createdOrder.TotalAmount,
+            integrationEvent.TotalAmount);
+
+        Assert.NotEqual(
+            default,
+            integrationEvent.CancelledAtUtc);
+    }
 }
