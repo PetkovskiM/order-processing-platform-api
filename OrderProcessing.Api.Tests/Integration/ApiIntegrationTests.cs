@@ -347,34 +347,34 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
             .SingleAsync();
     }
 
-    private async Task<OrderResponse> CreateTestOrderAsync(
-    int quantity = 1,
-    int customerId = TestDataSeeder.CustomerId)
-    {
-        var request = new CreateOrderRequest
-        {
-            CustomerId = customerId,
-            Items =
-            [
-                new CreateOrderItemRequest
-            {
-                ProductId = TestDataSeeder.ProductId,
-                Quantity = quantity
-            }
-            ]
-        };
+    //private async Task<OrderResponse> CreateTestOrderAsync(
+    //int quantity = 1,
+    //int customerId = TestDataSeeder.CustomerId)
+    //{
+    //    var request = new CreateOrderRequest
+    //    {
+    //        CustomerId = customerId,
+    //        Items =
+    //        [
+    //            new CreateOrderItemRequest
+    //        {
+    //            ProductId = TestDataSeeder.ProductId,
+    //            Quantity = quantity
+    //        }
+    //        ]
+    //    };
 
-        var response = await Client.PostAsJsonAsync(
-            "/api/orders",
-            request);
+    //    var response = await Client.PostAsJsonAsync(
+    //        "/api/orders",
+    //        request);
 
-        response.EnsureSuccessStatusCode();
+    //    response.EnsureSuccessStatusCode();
 
-        return await response.Content
-            .ReadFromJsonAsync<OrderResponse>()
-            ?? throw new InvalidOperationException(
-                "The create-order response was empty.");
-    }
+    //    return await response.Content
+    //        .ReadFromJsonAsync<OrderResponse>()
+    //        ?? throw new InvalidOperationException(
+    //            "The create-order response was empty.");
+    //}
 
 
     [Fact]
