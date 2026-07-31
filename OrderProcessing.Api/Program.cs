@@ -6,6 +6,7 @@ using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
 using OrderProcessing.Api.Services.Emailing;
+using OrderProcessing.Api.Services.Messaging;
 using OrderProcessing.Api.Services.Outbox;
 using OrderProcessing.Api.Services.Products;
 using Serilog;
@@ -56,6 +57,21 @@ namespace OrderProcessing.Api
             {
                 builder.Services.AddScoped<DevelopmentDataSeeder>();
             }
+
+            builder.Services
+            .AddOptions<OutboxOptions>()
+            .Bind(builder.Configuration.GetSection(OutboxOptions.SectionName))
+            .Validate(
+                options => options.BatchSize > 0,
+                "Outbox batch size must be greater than zero.")
+            .Validate(
+                options => options.MaxRetryCount > 0,
+                "Outbox maximum retry count must be greater than zero.")
+            .ValidateOnStart();
+
+            builder.Services.AddSingleton<IIntegrationEventPublisher, LoggingIntegrationEventPublisher>();
+
+            builder.Services.AddScoped<OutboxProcessor>();
 
             var app = builder.Build();
 
