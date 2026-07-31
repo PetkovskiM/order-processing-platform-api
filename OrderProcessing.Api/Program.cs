@@ -48,6 +48,11 @@ namespace OrderProcessing.Api
 
             builder.Services.AddHostedService<EmailBackgroundService>();
 
+            if (!builder.Environment.IsEnvironment("Testing"))
+            {
+                builder.Services.AddHostedService<OutboxBackgroundService>();
+            }
+
             builder.Services.AddMediatR(configuration =>
             {
                 configuration.RegisterServicesFromAssemblyContaining<Program>();
@@ -67,6 +72,9 @@ namespace OrderProcessing.Api
             .Validate(
                 options => options.MaxRetryCount > 0,
                 "Outbox maximum retry count must be greater than zero.")
+            .Validate(
+                 options => options.PollingIntervalSeconds > 0,
+                 "Outbox polling interval must be greater than zero.")
             .ValidateOnStart();
 
             builder.Services.AddSingleton<IIntegrationEventPublisher, LoggingIntegrationEventPublisher>();
