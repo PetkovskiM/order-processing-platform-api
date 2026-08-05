@@ -77,9 +77,67 @@ namespace OrderProcessing.Api
                  "Outbox polling interval must be greater than zero.")
             .ValidateOnStart();
 
-            builder.Services.AddSingleton<IIntegrationEventPublisher, LoggingIntegrationEventPublisher>();
+            var rabbitMqEnabled = builder.Configuration
+            .GetSection(RabbitMqOptions.SectionName)
+            .GetValue<bool>(
+                nameof(RabbitMqOptions.Enabled));
+
+                    if (rabbitMqEnabled && !builder.Environment.IsEnvironment("Testing"))
+                    {
+                        builder.Services.AddSingleton<
+                            IIntegrationEventPublisher,
+                            RabbitMqIntegrationEventPublisher>();
+                    }
+                    else
+                    {
+                        builder.Services.AddSingleton<
+                            IIntegrationEventPublisher,
+                            LoggingIntegrationEventPublisher>();
+                    }
 
             builder.Services.AddScoped<OutboxProcessor>();
+
+            builder.Services
+           .AddOptions<RabbitMqOptions>()
+           .Bind(
+               builder.Configuration.GetSection(
+                   RabbitMqOptions.SectionName))
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   !string.IsNullOrWhiteSpace(
+                       options.HostName),
+               "RabbitMQ host name is required when RabbitMQ is enabled.")
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   options.Port > 0,
+               "RabbitMQ port must be greater than zero.")
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   !string.IsNullOrWhiteSpace(
+                       options.UserName),
+               "RabbitMQ user name is required when RabbitMQ is enabled.")
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   !string.IsNullOrWhiteSpace(
+                       options.Password),
+               "RabbitMQ password is required when RabbitMQ is enabled.")
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   !string.IsNullOrWhiteSpace(
+                       options.ExchangeName),
+               "RabbitMQ exchange name is required when RabbitMQ is enabled.")
+           .Validate(
+               options =>
+                   !options.Enabled ||
+                   !string.IsNullOrWhiteSpace(
+                       options.EmailQueueName),
+               "RabbitMQ email queue name is required when RabbitMQ is enabled.")
+           .ValidateOnStart();
 
             var app = builder.Build();
 
