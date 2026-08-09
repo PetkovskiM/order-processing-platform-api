@@ -5,7 +5,6 @@ using OrderProcessing.Api.Data.Seeding;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
-using OrderProcessing.Api.Services.Emailing;
 using OrderProcessing.Api.Services.Messaging;
 using OrderProcessing.Api.Services.Outbox;
 using OrderProcessing.Api.Services.Products;
@@ -42,11 +41,6 @@ namespace OrderProcessing.Api
             //builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IAuditService, AuditService>();
             builder.Services.AddScoped<IOutboxWriter, OutboxWriter>();
-            builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
-            builder.Services.AddSingleton<IEmailQueue>(
-             _ => new EmailQueue(capacity: 100));
-
-            builder.Services.AddHostedService<EmailBackgroundService>();
 
             if (!builder.Environment.IsEnvironment("Testing"))
             {

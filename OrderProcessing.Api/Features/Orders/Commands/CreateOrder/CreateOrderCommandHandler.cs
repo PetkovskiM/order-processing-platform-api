@@ -5,7 +5,6 @@ using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
-using OrderProcessing.Api.Services.Emailing;
 using OrderProcessing.Api.Services.Outbox;
 using OrderProcessing.Contracts.Orders;
 
@@ -15,20 +14,17 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
 {
     private readonly OrderProcessingDbContext _dbContext;
     private readonly IAuditService _auditService;
-    private readonly IEmailQueue _emailQueue;
     private readonly ILogger<CreateOrderCommandHandler> _logger;
     private readonly IOutboxWriter _outboxWriter;
 
     public CreateOrderCommandHandler(
         OrderProcessingDbContext dbContext,
         IAuditService auditService,
-        IEmailQueue emailQueue,
         ILogger<CreateOrderCommandHandler> logger,
         IOutboxWriter outboxWriter)
     {
         _dbContext = dbContext;
         _auditService = auditService;
-        _emailQueue = emailQueue;
         _logger = logger;
         _outboxWriter = outboxWriter;
     }
@@ -131,14 +127,6 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
              order.Id,
              order.CustomerId,
              order.TotalAmount);
-
-            var emailMessage = CreateOrderCreatedEmail(order, customer);
-
-            await TryEnqueueEmailAsync(
-                emailMessage,
-                order.Id,
-                "Order Created",
-                cancellationToken);
 
             return MapToResponse(order, $"{customer.FirstName} {customer.LastName}");
         }
@@ -273,71 +261,6 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
             ?? throw new NotFoundException($"Customer with id {customerId} was not found.");
     }
 
-    private static EmailMessage CreateOrderCreatedEmail(
-   Order order,
-   CustomerSummary customer)
-    {
-        var customerName = $"{customer.FirstName} {customer.LastName}";
-
-        var itemLines = order.Items.Select(item =>
-            $"- {item.ProductName}: {item.Quantity} × {item.UnitPrice:F2} = {item.LineTotal:F2}");
-
-        var body = $"""
-        Hello {customerName},
-
-        Your order #{order.Id} has been created successfully.
-
-        Items:
-        {string.Join(Environment.NewLine, itemLines)}
-
-        Total amount: {order.TotalAmount:F2}
-        Status: {order.Status}
-
-        Thank you.
-        """;
-
-        return new EmailMessage
-        {
-            To = customer.Email,
-            Subject = $"Order #{order.Id} created",
-            Body = body,
-            IsHtml = false
-        };
-    }
-
-    private async Task TryEnqueueEmailAsync(
-     EmailMessage message,
-     int orderId,
-     string emailType,
-     CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _emailQueue.EnqueueAsync(message, cancellationToken);
-
-            _logger.LogInformation(
-                "{EmailType} email queued. OrderId: {OrderId}, Recipient: {Recipient}",
-                emailType,
-                orderId,
-                message.To);
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning(
-                "Order {OrderId} was saved, but enqueueing the {EmailType} email was cancelled",
-                orderId,
-                emailType);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(
-                exception,
-                "Order {OrderId} was saved, but its {EmailType} email could not be queued",
-                orderId,
-                emailType);
-        }
-    }
 
     private static OrderCreatedIntegrationEvent CreateOrderCreatedIntegrationEvent(Order order, CustomerSummary customer)
     {
