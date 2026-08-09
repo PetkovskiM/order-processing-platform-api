@@ -1,0 +1,301 @@
+﻿using Microsoft.Extensions.Options;
+using OrderProcessing.Contracts.Orders;
+using OrderProcessing.EmailWorker.Configuration;
+using OrderProcessing.EmailWorker.Messaging;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text.Json;
+using System.Threading.Channels;
+
+namespace OrderProcessing.EmailWorker;
+
+public sealed class RabbitMqEmailConsumer : BackgroundService
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly RabbitMqOptions _options;
+    private readonly ILogger<RabbitMqEmailConsumer> _logger;
+
+    private IConnection? _connection;
+    private IChannel? _channel;
+    private string? _consumerTag;
+
+    public RabbitMqEmailConsumer(
+        IServiceScopeFactory scopeFactory,
+        IOptions<RabbitMqOptions> options,
+        ILogger<RabbitMqEmailConsumer> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _options = options.Value;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RunConsumerAsync(stoppingToken);
+                return;
+            }
+            catch (OperationCanceledException)
+                when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "RabbitMQ email consumer failed to start. " +
+                    "Retrying in {RetryIntervalSeconds} seconds",
+                    _options.NetworkRecoveryIntervalSeconds);
+
+                await CloseRabbitMqAsync();
+
+                await Task.Delay(
+                    TimeSpan.FromSeconds(
+                        _options.NetworkRecoveryIntervalSeconds),
+                    stoppingToken);
+            }
+        }
+    }
+
+    private async Task RunConsumerAsync(CancellationToken stoppingToken)
+    {
+        var connectionFactory = new ConnectionFactory
+        {
+            HostName = _options.HostName,
+            Port = _options.Port,
+            UserName = _options.UserName,
+            Password = _options.Password,
+            VirtualHost = _options.VirtualHost,
+
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = true,
+
+            NetworkRecoveryInterval = TimeSpan.FromSeconds(_options.NetworkRecoveryIntervalSeconds),
+
+            ConsumerDispatchConcurrency = 1
+        };
+
+        _connection = await connectionFactory.CreateConnectionAsync(_options.ClientProvidedName, stoppingToken);
+
+        _channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken);
+
+        await DeclareTopologyAsync(_channel, stoppingToken);
+
+        await _channel.BasicQosAsync(
+            prefetchSize: 0,
+            prefetchCount: _options.PrefetchCount,
+            global: false,
+            cancellationToken: stoppingToken);
+
+        var consumer = new AsyncEventingBasicConsumer(_channel);
+
+        consumer.ReceivedAsync += async (_, eventArgs) =>
+                await HandleDeliveryAsync(eventArgs);
+
+        _consumerTag =
+            await _channel.BasicConsumeAsync(
+                queue: _options.EmailQueueName,
+                autoAck: false,
+                consumer: consumer,
+                cancellationToken: stoppingToken);
+
+        _logger.LogInformation(
+            "Email worker is consuming queue {QueueName} " +
+            "on RabbitMQ {HostName}:{Port} " +
+            "with consumer tag {ConsumerTag}",
+            _options.EmailQueueName,
+            _options.HostName,
+            _options.Port,
+            _consumerTag);
+
+        try
+        {
+            await Task.Delay(
+                Timeout.InfiniteTimeSpan,
+                stoppingToken);
+        }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "RabbitMQ email consumer is stopping");
+        }
+        finally
+        {
+            await CloseRabbitMqAsync();
+        }
+    }
+
+    private async Task HandleDeliveryAsync(
+        BasicDeliverEventArgs eventArgs)
+    {
+        var channel = _channel
+            ?? throw new InvalidOperationException(
+                "RabbitMQ channel is not available.");
+
+        // RabbitMQ.Client 7 uses ReadOnlyMemory<byte>.
+        // Copy it before this callback returns.
+        var body = eventArgs.Body.ToArray();
+
+        var eventType = eventArgs.BasicProperties.Type;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(eventType))
+            {
+                throw new UnsupportedIntegrationEventException( "<missing>");
+            }
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+
+            var handler = scope.ServiceProvider
+                .GetRequiredService<OrderEventEmailHandler>();
+
+            await handler.HandleAsync(
+                eventType,
+                body,
+                CancellationToken.None);
+
+            await channel.BasicAckAsync(
+                deliveryTag: eventArgs.DeliveryTag,
+                multiple: false);
+
+            _logger.LogInformation(
+                "Acknowledged RabbitMQ message {MessageId} " +
+                "with routing key {RoutingKey}",
+                eventArgs.BasicProperties.MessageId,
+                eventArgs.RoutingKey);
+        }
+        catch (JsonException exception)
+        {
+            await RejectPermanentFailureAsync(
+                channel,
+                eventArgs,
+                exception);
+        }
+        catch (UnsupportedIntegrationEventException exception)
+        {
+            await RejectPermanentFailureAsync(
+                channel,
+                eventArgs,
+                exception);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Temporary failure processing RabbitMQ " +
+                "message {MessageId}. The message will be requeued",
+                eventArgs.BasicProperties.MessageId);
+
+            await channel.BasicNackAsync(
+                deliveryTag: eventArgs.DeliveryTag,
+                multiple: false,
+                requeue: true);
+        }
+    }
+
+    private async Task RejectPermanentFailureAsync(
+        IChannel channel,
+        BasicDeliverEventArgs eventArgs,
+        Exception exception)
+    {
+        _logger.LogError(
+            exception,
+            "Permanent failure processing RabbitMQ " +
+            "message {MessageId}. The message will not be requeued",
+            eventArgs.BasicProperties.MessageId);
+
+        await channel.BasicNackAsync(
+            deliveryTag: eventArgs.DeliveryTag,
+            multiple: false,
+            requeue: false);
+    }
+
+    private async Task DeclareTopologyAsync(IChannel channel, CancellationToken cancellationToken)
+    {
+        await channel.ExchangeDeclareAsync(
+            exchange: _options.ExchangeName,
+            type: ExchangeType.Topic,
+            durable: true,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+
+        await channel.QueueDeclareAsync(
+            queue: _options.EmailQueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+
+        await channel.QueueBindAsync(
+            queue: _options.EmailQueueName,
+            exchange: _options.ExchangeName,
+            routingKey: OrderEventRoutingKeys.Created,
+            cancellationToken: cancellationToken);
+
+        await channel.QueueBindAsync(
+            queue: _options.EmailQueueName,
+            exchange: _options.ExchangeName,
+            routingKey: OrderEventRoutingKeys.Completed,
+            cancellationToken: cancellationToken);
+
+        await channel.QueueBindAsync(
+            queue: _options.EmailQueueName,
+            exchange: _options.ExchangeName,
+            routingKey: OrderEventRoutingKeys.Cancelled,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task CloseRabbitMqAsync()
+    {
+        var channel = _channel;
+        _channel = null;
+        _consumerTag = null;
+
+        if (channel is not null)
+        {
+            try
+            {
+                if (channel.IsOpen)
+                {
+                    await channel.CloseAsync(CancellationToken.None);
+                }
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Error closing RabbitMQ consumer channel");
+            }
+
+            await channel.DisposeAsync();
+        }
+
+        var connection = _connection;
+        _connection = null;
+
+        if (connection is not null)
+        {
+            try
+            {
+                if (connection.IsOpen)
+                {
+                    await connection.CloseAsync(CancellationToken.None);
+                }
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Error closing RabbitMQ consumer connection");
+            }
+
+            await connection.DisposeAsync();
+        }
+    }
+}

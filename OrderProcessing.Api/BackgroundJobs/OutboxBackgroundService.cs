@@ -3,8 +3,7 @@ using OrderProcessing.Api.Services.Outbox;
 
 namespace OrderProcessing.Api.BackgroundJobs;
 
-public sealed class OutboxBackgroundService
-    : BackgroundService
+public sealed class OutboxBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly OutboxOptions _options;
