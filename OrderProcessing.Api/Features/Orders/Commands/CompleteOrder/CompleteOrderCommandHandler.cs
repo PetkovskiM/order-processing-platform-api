@@ -5,7 +5,6 @@ using OrderProcessing.Api.DTOs.Orders;
 using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Services.Auditing;
-using OrderProcessing.Api.Services.Emailing;
 using OrderProcessing.Api.Services.Outbox;
 using OrderProcessing.Contracts.Orders;
 
@@ -16,20 +15,17 @@ public sealed class CompleteOrderCommandHandler
 {
     private readonly OrderProcessingDbContext _dbContext;
     private readonly IAuditService _auditService;
-    private readonly IEmailQueue _emailQueue;
     private readonly ILogger<CompleteOrderCommandHandler> _logger;
     private readonly IOutboxWriter _outboxWriter;
 
     public CompleteOrderCommandHandler(
         OrderProcessingDbContext dbContext,
         IAuditService auditService,
-        IEmailQueue emailQueue,
         ILogger<CompleteOrderCommandHandler> logger,
         IOutboxWriter outboxWriter)
     {
         _dbContext = dbContext;
         _auditService = auditService;
-        _emailQueue = emailQueue;
         _logger = logger;
         _outboxWriter = outboxWriter;
     }
@@ -88,83 +84,7 @@ public sealed class CompleteOrderCommandHandler
 
         _logger.LogInformation( "Order {OrderId} completed", order.Id);
 
-        var emailMessage = CreateOrderCompletedEmail(order);
-
-        await TryEnqueueEmailAsync(
-            emailMessage,
-            order.Id,
-            cancellationToken);
-
         return MapToResponse(order);
-    }
-
-    private static EmailMessage CreateOrderCompletedEmail(
-        Order order)
-    {
-        var customerName =
-            $"{order.Customer.FirstName} {order.Customer.LastName}";
-
-        var itemLines = order.Items.Select(item =>
-            $"- {item.ProductName}: {item.Quantity} × " +
-            $"{item.UnitPrice:F2} = {item.LineTotal:F2}");
-
-        var body = $"""
-            Hello {customerName},
-
-            Your order #{order.Id} has been completed successfully.
-
-            Items:
-            {string.Join(Environment.NewLine, itemLines)}
-
-            Total amount: {order.TotalAmount:F2}
-            Status: {order.Status}
-            Completed at: {order.CompletedAtUtc:yyyy-MM-dd HH:mm} UTC
-
-            Thank you.
-            """;
-
-        return new EmailMessage
-        {
-            To = order.Customer.Email,
-            Subject = $"Order #{order.Id} completed",
-            Body = body,
-            IsHtml = false
-        };
-    }
-
-    private async Task TryEnqueueEmailAsync(
-        EmailMessage message,
-        int orderId,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _emailQueue.EnqueueAsync(
-                message,
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Order-completed email queued. " +
-                "OrderId: {OrderId}, Recipient: {Recipient}",
-                orderId,
-                message.To);
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning(
-                "Order {OrderId} was completed, but email " +
-                "enqueueing was cancelled",
-                orderId);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(
-                exception,
-                "Order {OrderId} was completed, but its email " +
-                "could not be queued",
-                orderId);
-        }
     }
 
     private static OrderResponse MapToResponse(Order order)
