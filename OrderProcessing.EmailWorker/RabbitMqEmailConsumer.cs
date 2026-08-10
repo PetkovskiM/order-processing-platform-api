@@ -130,8 +130,7 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
         }
     }
 
-    private async Task HandleDeliveryAsync(
-        BasicDeliverEventArgs eventArgs)
+    private async Task HandleDeliveryAsync(BasicDeliverEventArgs eventArgs)
     {
         var channel = _channel
             ?? throw new InvalidOperationException(
@@ -142,7 +141,8 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
         var body = eventArgs.Body.ToArray();
 
         var eventType = eventArgs.BasicProperties.Type;
-
+        var messageIdText = eventArgs.BasicProperties.MessageId;
+        
         try
         {
             if (string.IsNullOrWhiteSpace(eventType))
@@ -150,19 +150,18 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
                 throw new UnsupportedIntegrationEventException( "<missing>");
             }
 
+            if (!Guid.TryParse(messageIdText, out var messageId))
+            {
+                throw new UnsupportedIntegrationEventException($"Invalid message ID '{messageIdText}'.");
+            }
+
             await using var scope = _scopeFactory.CreateAsyncScope();
 
-            var handler = scope.ServiceProvider
-                .GetRequiredService<OrderEventEmailHandler>();
+            var processor = scope.ServiceProvider.GetRequiredService<IdempotentEmailMessageProcessor>();
 
-            await handler.HandleAsync(
-                eventType,
-                body,
-                CancellationToken.None);
+            await processor.ProcessAsync(messageId, eventType, body, CancellationToken.None);
 
-            await channel.BasicAckAsync(
-                deliveryTag: eventArgs.DeliveryTag,
-                multiple: false);
+            await channel.BasicAckAsync(deliveryTag: eventArgs.DeliveryTag, multiple: false);
 
             _logger.LogInformation(
                 "Acknowledged RabbitMQ message {MessageId} " +

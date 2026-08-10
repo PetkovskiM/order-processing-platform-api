@@ -1,9 +1,25 @@
+using Microsoft.EntityFrameworkCore;
 using OrderProcessing.EmailWorker;
 using OrderProcessing.EmailWorker.Configuration;
 using OrderProcessing.EmailWorker.Emailing;
 using OrderProcessing.EmailWorker.Messaging;
+using OrderProcessing.EmailWorker.Persistence;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("EmailWorkerConnection") ?? 
+    throw new InvalidOperationException( "EmailWorker database connection string is missing.");
+
+builder.Services.AddDbContext<EmailWorkerDbContext>(
+    options =>
+        options.UseSqlServer(
+            connectionString,
+            sqlOptions =>
+            {
+                sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "email");
+            }));
+
+builder.Services.AddScoped<IdempotentEmailMessageProcessor>();
 
 builder.Services
     .AddOptions<RabbitMqOptions>()
@@ -38,15 +54,12 @@ builder.Services
         "RabbitMQ prefetch count must be greater than zero.")
     .ValidateOnStart();
 
-builder.Services.AddSingleton<
-    IEmailSender,
-    LoggingEmailSender>();
 
-builder.Services.AddScoped<
-    OrderEventEmailHandler>();
+builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
 
-builder.Services.AddHostedService<
-    RabbitMqEmailConsumer>();
+builder.Services.AddScoped<OrderEventEmailHandler>();
+
+builder.Services.AddHostedService<RabbitMqEmailConsumer>();
 
 var host = builder.Build();
 
