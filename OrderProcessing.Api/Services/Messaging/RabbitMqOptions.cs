@@ -23,4 +23,16 @@ public sealed class RabbitMqOptions
     public string ClientProvidedName { get; set; } = "order-processing-api-publisher";
 
     public int NetworkRecoveryIntervalSeconds { get; set; } = 5;
+
+    public string DeadLetterExchangeName { get; set; } = "order-processing.dead-letter";
+
+    public string DeadLetterQueueName { get; set; } = "order-processing.email.dead-letter";
+
+    public string DeadLetterRoutingKey { get; set; } = "email.failed";
+
+    public int DeliveryLimit { get; set; } = 5;
+
+    public int RetryMinDelayMilliseconds { get; set; } = 5000;
+
+    public int RetryMaxDelayMilliseconds { get; set; } = 30000;
 }
