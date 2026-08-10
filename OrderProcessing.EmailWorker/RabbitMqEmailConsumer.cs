@@ -189,12 +189,11 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
             _logger.LogError(
                 exception,
                 "Temporary failure processing RabbitMQ " +
-                "message {MessageId}. The message will be requeued",
+                "message {MessageId}. The message will be retried",
                 eventArgs.BasicProperties.MessageId);
 
-            await channel.BasicNackAsync(
+            await channel.BasicRejectAsync(
                 deliveryTag: eventArgs.DeliveryTag,
-                multiple: false,
                 requeue: true);
         }
     }
@@ -204,20 +203,62 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
         BasicDeliverEventArgs eventArgs,
         Exception exception)
     {
-        _logger.LogError(
-            exception,
-            "Permanent failure processing RabbitMQ " +
-            "message {MessageId}. The message will not be requeued",
-            eventArgs.BasicProperties.MessageId);
+        _logger.LogError(exception,
+        "Permanent failure processing RabbitMQ " +
+        "message {MessageId}. " +
+        "The message will be dead-lettered",
+        eventArgs.BasicProperties.MessageId);
 
-        await channel.BasicNackAsync(
-            deliveryTag: eventArgs.DeliveryTag,
-            multiple: false,
-            requeue: false);
+        await channel.BasicRejectAsync(
+        deliveryTag: eventArgs.DeliveryTag,
+        requeue: false);
     }
 
     private async Task DeclareTopologyAsync(IChannel channel, CancellationToken cancellationToken)
     {
+        var emailQueueArguments = new Dictionary<string, object?>
+        {
+            ["x-queue-type"] = "quorum",
+
+            ["x-delivery-limit"] = _options.DeliveryLimit,
+
+            ["x-delayed-retry-type"] = "failed",
+
+            ["x-delayed-retry-min"] = _options.RetryMinDelayMilliseconds,
+
+            ["x-delayed-retry-max"] = _options.RetryMaxDelayMilliseconds,
+
+            ["x-dead-letter-exchange"] = _options.DeadLetterExchangeName,
+
+            ["x-dead-letter-routing-key"] = _options.DeadLetterRoutingKey
+        };
+
+        await channel.ExchangeDeclareAsync(
+            exchange: _options.DeadLetterExchangeName,
+            type: ExchangeType.Direct,
+            durable: true,
+            autoDelete: false,
+            cancellationToken: cancellationToken);
+
+        var deadLetterQueueArguments = new Dictionary<string, object?>
+        {
+            ["x-queue-type"] = "quorum"
+        };
+
+        await channel.QueueDeclareAsync(
+            queue: _options.DeadLetterQueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: deadLetterQueueArguments,
+            cancellationToken: cancellationToken);
+
+        await channel.QueueBindAsync(
+            queue: _options.DeadLetterQueueName,
+            exchange: _options.DeadLetterExchangeName,
+            routingKey: _options.DeadLetterRoutingKey,
+            cancellationToken: cancellationToken);
+
         await channel.ExchangeDeclareAsync(
             exchange: _options.ExchangeName,
             type: ExchangeType.Topic,
@@ -230,6 +271,7 @@ public sealed class RabbitMqEmailConsumer : BackgroundService
             durable: true,
             exclusive: false,
             autoDelete: false,
+            arguments: emailQueueArguments,
             cancellationToken: cancellationToken);
 
         await channel.QueueBindAsync(
