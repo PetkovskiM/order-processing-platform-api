@@ -62,9 +62,7 @@ public sealed class OrderEventEmailHandler
                 $"was created with a total of " +
                 $"{integrationEvent.TotalAmount:C}.");
 
-        await _emailSender.SendAsync(
-            email,
-            cancellationToken);
+        await _emailSender.SendAsync(email, cancellationToken);
 
         _logger.LogInformation(
             "Handled order-created event {MessageId} " +
@@ -73,9 +71,7 @@ public sealed class OrderEventEmailHandler
             integrationEvent.OrderId);
     }
 
-    private async Task HandleCompletedAsync(
-        OrderCompletedIntegrationEvent integrationEvent,
-        CancellationToken cancellationToken)
+    private async Task HandleCompletedAsync(OrderCompletedIntegrationEvent integrationEvent, CancellationToken cancellationToken)
     {
         var email = new EmailMessage(
             Recipient: integrationEvent.CustomerEmail,
@@ -86,9 +82,7 @@ public sealed class OrderEventEmailHandler
                 $"your order #{integrationEvent.OrderId} " +
                 "has been completed.");
 
-        await _emailSender.SendAsync(
-            email,
-            cancellationToken);
+        await _emailSender.SendAsync(email, cancellationToken);
 
         _logger.LogInformation(
             "Handled order-completed event {MessageId} " +
@@ -110,9 +104,7 @@ public sealed class OrderEventEmailHandler
                 $"your order #{integrationEvent.OrderId} " +
                 "has been cancelled.");
 
-        await _emailSender.SendAsync(
-            email,
-            cancellationToken);
+        await _emailSender.SendAsync(email, cancellationToken);
 
         _logger.LogInformation(
             "Handled order-cancelled event {MessageId} " +

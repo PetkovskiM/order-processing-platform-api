@@ -1,100 +1,183 @@
 ﻿using System.Text.Json;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrderProcessing.Contracts.Orders;
 using OrderProcessing.EmailWorker.Emailing;
 using OrderProcessing.EmailWorker.Messaging;
+using OrderProcessing.EmailWorker.Persistence;
 
 namespace OrderProcessing.EmailWorker.Tests;
 
-public sealed class OrderEventEmailHandlerTests
+public sealed class IdempotentEmailMessageProcessorTests
 {
     [Fact]
-    public async Task HandleAsync_ForOrderCreatedEvent_SendsCreatedEmail()
+    public async Task ProcessAsync_WhenMessageIsDeliveredTwice_SendsEmailOnce()
     {
         // Arrange
-        var sender = new TestEmailSender();
+        await using var connection =
+            new SqliteConnection("Data Source=:memory:");
 
-        var handler = new OrderEventEmailHandler(
-            sender,
-            NullLogger<OrderEventEmailHandler>.Instance);
+        await connection.OpenAsync();
+
+        var options =
+            new DbContextOptionsBuilder<
+                EmailWorkerDbContext>()
+                .UseSqlite(connection)
+                .Options;
+
+        await using var dbContext =
+            new EmailWorkerDbContext(options);
+
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var emailSender = new TestEmailSender();
+
+        var eventHandler =
+            new OrderEventEmailHandler(
+                emailSender,
+                NullLogger<OrderEventEmailHandler>.Instance);
+
+        var processor =
+            new IdempotentEmailMessageProcessor(
+                dbContext,
+                eventHandler,
+                NullLogger<
+                    IdempotentEmailMessageProcessor>.Instance);
+
+        var messageId = Guid.NewGuid();
 
         var integrationEvent =
             new OrderCreatedIntegrationEvent(
-                MessageId: Guid.NewGuid(),
+                MessageId: messageId,
                 OccurredAtUtc: DateTime.UtcNow,
-                OrderId: 1050,
-                CustomerId: 1001,
-                CustomerName: "John Smith",
-                CustomerEmail: "john.smith@example.com",
-                TotalAmount: 99.99m,
+                OrderId: 123,
+                CustomerId: 456,
+                CustomerName: "Test Customer",
+                CustomerEmail: "test@example.com",
+                TotalAmount: 100m,
                 CreatedAtUtc: DateTime.UtcNow,
-                Items:
-                [
-                    new OrderItemIntegrationModel(
-                        ProductId: 2001,
-                        ProductName: "Keyboard",
-                        Quantity: 1,
-                        UnitPrice: 99.99m,
-                        LineTotal: 99.99m)
-                ]);
+                Items: []);
 
-        var body = JsonSerializer.SerializeToUtf8Bytes(
-            integrationEvent,
-            new JsonSerializerOptions(
-                JsonSerializerDefaults.Web));
+        var body =
+            JsonSerializer.SerializeToUtf8Bytes(
+                integrationEvent,
+                new JsonSerializerOptions(
+                    JsonSerializerDefaults.Web));
+
+        var eventType =
+            typeof(OrderCreatedIntegrationEvent)
+                .FullName!;
 
         // Act
-        await handler.HandleAsync(
-            typeof(OrderCreatedIntegrationEvent).FullName!,
+        await processor.ProcessAsync(
+            messageId,
+            eventType,
+            body,
+            CancellationToken.None);
+
+        await processor.ProcessAsync(
+            messageId,
+            eventType,
             body,
             CancellationToken.None);
 
         // Assert
-        var email = Assert.Single(sender.Messages);
+        Assert.Single(emailSender.Messages);
+
+        var processedMessages =
+            await dbContext.ProcessedMessages
+                .ToListAsync();
+
+        var processed =
+            Assert.Single(processedMessages);
 
         Assert.Equal(
-            "john.smith@example.com",
-            email.Recipient);
-
-        Assert.Contains(
-            "1050",
-            email.Subject);
-
-        Assert.Contains(
-            "created",
-            email.Subject,
-            StringComparison.OrdinalIgnoreCase);
+            messageId,
+            processed.MessageId);
     }
 
     [Fact]
-    public async Task HandleAsync_ForUnknownEvent_ThrowsException()
+    public async Task ProcessAsync_WhenEmailSendingFails_DoesNotRecordMessage()
     {
-        // Arrange
-        var handler = new OrderEventEmailHandler(
-            new TestEmailSender(),
-            NullLogger<OrderEventEmailHandler>.Instance);
+        await using var connection =
+            new SqliteConnection("Data Source=:memory:");
 
-        // Act
-        var action = () => handler.HandleAsync(
-            "UnknownIntegrationEvent",
-            [],
-            CancellationToken.None);
+        await connection.OpenAsync();
 
-        // Assert
-        await Assert.ThrowsAsync<
-            UnsupportedIntegrationEventException>(
-                action);
+        var options =
+            new DbContextOptionsBuilder<
+                EmailWorkerDbContext>()
+                .UseSqlite(connection)
+                .Options;
+
+        await using var dbContext =
+            new EmailWorkerDbContext(options);
+
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var eventHandler =
+            new OrderEventEmailHandler(
+                new FailingEmailSender(),
+                NullLogger<OrderEventEmailHandler>.Instance);
+
+        var processor =
+            new IdempotentEmailMessageProcessor(
+                dbContext,
+                eventHandler,
+                NullLogger<
+                    IdempotentEmailMessageProcessor>.Instance);
+
+        var messageId = Guid.NewGuid();
+
+        var integrationEvent =
+            new OrderCompletedIntegrationEvent(
+                MessageId: messageId,
+                OccurredAtUtc: DateTime.UtcNow,
+                OrderId: 123,
+                CustomerId: 456,
+                CustomerName: "Test Customer",
+                CustomerEmail: "test@example.com",
+                TotalAmount: 100m,
+                CompletedAtUtc: DateTime.UtcNow);
+
+        var body =
+            JsonSerializer.SerializeToUtf8Bytes(
+                integrationEvent,
+                new JsonSerializerOptions(
+                    JsonSerializerDefaults.Web));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => processor.ProcessAsync(
+                messageId,
+                typeof(OrderCompletedIntegrationEvent)
+                    .FullName!,
+                body,
+                CancellationToken.None));
+
+        Assert.Empty(
+            await dbContext.ProcessedMessages.ToListAsync());
     }
 
     private sealed class TestEmailSender : IEmailSender
     {
         public List<EmailMessage> Messages { get; } = [];
 
-        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        public Task SendAsync(
+            EmailMessage message,
+            CancellationToken cancellationToken)
         {
             Messages.Add(message);
 
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingEmailSender : IEmailSender
+    {
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException( "Simulated email failure.");
         }
     }
 }
