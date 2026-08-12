@@ -54,8 +54,32 @@ builder.Services
         "RabbitMQ prefetch count must be greater than zero.")
     .ValidateOnStart();
 
+builder.Services
+    .AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(
+        options => !options.UseSmtp ||!string.IsNullOrWhiteSpace(options.Host), "SMTP host is required.")
+    .Validate(
+        options => !options.UseSmtp || options.Port > 0, "SMTP port must be greater than zero.")
+    .Validate(
+        options => !options.UseSmtp || !string.IsNullOrWhiteSpace(options.UserName), "SMTP username is required.")
+    .Validate(
+        options => !options.UseSmtp || !string.IsNullOrWhiteSpace(options.Password), "SMTP password is required.")
+    .Validate(
+        options => !options.UseSmtp || !string.IsNullOrWhiteSpace(options.FromAddress), "SMTP from address is required.")
+    .ValidateOnStart();
 
-builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+
+var useSmtp = builder.Configuration.GetSection(EmailOptions.SectionName).GetValue<bool>(nameof(EmailOptions.UseSmtp));
+
+if (useSmtp)
+{
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+}
 
 builder.Services.AddScoped<OrderEventEmailHandler>();
 
