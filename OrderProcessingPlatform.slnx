@@ -6,4 +6,5 @@
   <Project Path="OrderProcessing.Api/OrderProcessing.Api.csproj" Id="d38b0644-7c76-43b8-a7ec-51d17124f79b" />
   <Project Path="OrderProcessing.Contracts/OrderProcessing.Contracts.csproj" Id="a0233be0-8557-4f97-8542-e65d83a77fd8" />
   <Project Path="OrderProcessing.EmailWorker/OrderProcessing.EmailWorker.csproj" Id="0063f556-d348-4cf3-a557-7b2b6a7a8dfa" />
+  <Project Path="OrderProcessing.ReadModelWorker/OrderProcessing.ReadModelWorker.csproj" Id="fa07bad6-4585-4908-b9ca-c4fa82cec264" />
 </Solution>
