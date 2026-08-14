@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using OrderProcessing.ReadModelWorker;
 using OrderProcessing.ReadModelWorker.Configuration;
+using OrderProcessing.ReadModelWorker.Messaging;
 using OrderProcessing.ReadModelWorker.Persistence;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -25,6 +27,20 @@ builder.Services.AddSingleton<IMongoClient>(serviceProvider =>
 builder.Services.AddHostedService<MongoDbInitializer>();
 
 builder.Services.AddSingleton<OrderReadModelStore>();
+
+builder.Services
+    .AddOptions<RabbitMqOptions>()
+    .Bind(builder.Configuration.GetSection(RabbitMqOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.HostName), "RabbitMQ host is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.ReadModelQueueName), "RabbitMQ read-model queue name is required.")
+    .ValidateOnStart();
+
+
+builder.Services.AddSingleton<IOrderReadModelRepository, MongoOrderReadModelRepository>();
+
+builder.Services.AddScoped<OrderEventProjectionHandler>();
+
+builder.Services.AddHostedService<RabbitMqReadModelConsumer>();
 
 var host = builder.Build();
 
