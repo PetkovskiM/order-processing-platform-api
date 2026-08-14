@@ -2,6 +2,7 @@
   <Folder Name="/tests/">
     <Project Path="OrderProcessing.Api.Tests/OrderProcessing.Api.Tests.csproj" Id="dfe641c8-8c02-461a-a746-f9229f5d179b" />
     <Project Path="OrderProcessing.EmailWorker.Tests/OrderProcessing.EmailWorker.Tests.csproj" Id="a8a40817-1d06-4fa1-b17e-6f9f31fd3ded" />
+    <Project Path="OrderProcessing.ReadModelWorker.Tests/OrderProcessing.ReadModelWorker.Tests.csproj" Id="b2a9aaf7-6417-4f8e-ac99-131228b055e8" />
   </Folder>
   <Project Path="OrderProcessing.Api/OrderProcessing.Api.csproj" Id="d38b0644-7c76-43b8-a7ec-51d17124f79b" />
   <Project Path="OrderProcessing.Contracts/OrderProcessing.Contracts.csproj" Id="a0233be0-8557-4f97-8542-e65d83a77fd8" />
