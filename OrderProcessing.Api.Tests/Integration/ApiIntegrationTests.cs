@@ -347,35 +347,6 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
             .SingleAsync();
     }
 
-    //private async Task<OrderResponse> CreateTestOrderAsync(
-    //int quantity = 1,
-    //int customerId = TestDataSeeder.CustomerId)
-    //{
-    //    var request = new CreateOrderRequest
-    //    {
-    //        CustomerId = customerId,
-    //        Items =
-    //        [
-    //            new CreateOrderItemRequest
-    //        {
-    //            ProductId = TestDataSeeder.ProductId,
-    //            Quantity = quantity
-    //        }
-    //        ]
-    //    };
-
-    //    var response = await Client.PostAsJsonAsync(
-    //        "/api/orders",
-    //        request);
-
-    //    response.EnsureSuccessStatusCode();
-
-    //    return await response.Content
-    //        .ReadFromJsonAsync<OrderResponse>()
-    //        ?? throw new InvalidOperationException(
-    //            "The create-order response was empty.");
-    //}
-
 
     [Fact]
     public async Task CancelOrder_CreatesCancellationAuditLog()
@@ -697,5 +668,29 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
         Assert.NotEqual(
             default,
             integrationEvent.CancelledAtUtc);
+    }
+
+    [Fact]
+    public async Task GetOrderById_WhenReadModelExists_ReturnsOrder()
+    {
+        var response = await Client.GetAsync(
+            $"/api/orders/" +
+            $"{TestOrderReadModelReader.ExistingOrderId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
+
+        Assert.NotNull(order);
+
+        Assert.Equal(TestOrderReadModelReader.ExistingOrderId, order.Id);
+    }
+
+    [Fact]
+    public async Task GetOrderById_WhenReadModelDoesNotExist_ReturnsNotFound()
+    {
+        var response = await Client.GetAsync("/api/orders/999999");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

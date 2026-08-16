@@ -1,5 +1,5 @@
 ﻿using MongoDB.Driver;
-using OrderProcessing.ReadModelWorker.ReadModels;
+using OrderProcessing.ReadModels.Orders;
 
 namespace OrderProcessing.ReadModelWorker.Persistence;
 
