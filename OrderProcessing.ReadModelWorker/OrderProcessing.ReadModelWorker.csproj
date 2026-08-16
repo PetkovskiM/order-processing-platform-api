@@ -15,5 +15,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OrderProcessing.Contracts\OrderProcessing.Contracts.csproj" />
+    <ProjectReference Include="..\OrderProcessing.ReadModels\OrderProcessing.ReadModels.csproj" />
   </ItemGroup>
 </Project>

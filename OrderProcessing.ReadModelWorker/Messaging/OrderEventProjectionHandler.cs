@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using OrderProcessing.Contracts.Orders;
+using OrderProcessing.ReadModels.Orders;
 using OrderProcessing.ReadModelWorker.Persistence;
-using OrderProcessing.ReadModelWorker.ReadModels;
 
 namespace OrderProcessing.ReadModelWorker.Messaging;
 

@@ -1,9 +1,9 @@
 ﻿using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrderProcessing.Contracts.Orders;
+using OrderProcessing.ReadModels.Orders;
 using OrderProcessing.ReadModelWorker.Messaging;
 using OrderProcessing.ReadModelWorker.Persistence;
-using OrderProcessing.ReadModelWorker.ReadModels;
 
 namespace OrderProcessing.ReadModelWorker.Tests;
 

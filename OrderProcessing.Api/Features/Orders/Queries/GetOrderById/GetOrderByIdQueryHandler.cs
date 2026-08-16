@@ -2,39 +2,50 @@
 using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Data;
 using OrderProcessing.Api.DTOs.Orders;
+using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
+using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
 
 namespace OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 
 public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, OrderResponse>
 {
-    private readonly OrderProcessingDbContext _dbContext;
-
-    public GetOrderByIdQueryHandler(OrderProcessingDbContext dbContext)
+    private readonly IOrderReadModelReader _reader;
+    public GetOrderByIdQueryHandler(IOrderReadModelReader reader)
     {
-        _dbContext = dbContext;
+        _reader = reader;
     }
 
     public async Task<OrderResponse> Handle(GetOrderByIdQuery request, CancellationToken cancellationToken)
     {
-        return await _dbContext.Orders
-            .AsNoTracking()
-            .Where(order => order.Id == request.OrderId)
-            .Select(order => new OrderResponse
-            {
-                Id = order.Id,
-                CustomerId = order.CustomerId,
-                CustomerName =
-                    order.Customer.FirstName + " " +
-                    order.Customer.LastName,
-                Status = order.Status,
-                TotalAmount = order.TotalAmount,
-                CreatedAtUtc = order.CreatedAtUtc,
-                CompletedAtUtc = order.CompletedAtUtc,
-                CancelledAtUtc = order.CancelledAtUtc,
-                Items = order.Items
-                    .OrderBy(item => item.Id)
-                    .Select(item => new OrderItemResponse
+        var readModel = await _reader.GetByIdAsync(request.OrderId, cancellationToken);
+
+        if (readModel is null)
+        {
+            throw new NotFoundException($"Order with id {request.OrderId} was not found.");
+        }
+
+        if (!Enum.TryParse<OrderStatus>(readModel.Status, ignoreCase: true, out var status))
+        {
+            throw new InvalidOperationException(
+                $"Order read model {readModel.OrderId} " +
+                $"contains invalid status '{readModel.Status}'.");
+        }
+
+        return new OrderResponse
+        {
+            Id = readModel.OrderId,
+            CustomerId = readModel.CustomerId,
+            CustomerName = readModel.CustomerName,
+            Status = status,
+            TotalAmount = readModel.TotalAmount,
+            CreatedAtUtc = readModel.CreatedAtUtc,
+            CompletedAtUtc = readModel.CompletedAtUtc,
+            CancelledAtUtc = readModel.CancelledAtUtc,
+
+            Items = readModel.Items
+                .Select(item =>
+                    new OrderItemResponse
                     {
                         ProductId = item.ProductId,
                         ProductName = item.ProductName,
@@ -42,10 +53,7 @@ public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery
                         UnitPrice = item.UnitPrice,
                         LineTotal = item.LineTotal
                     })
-                    .ToList()
-            })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException(
-                $"Order with id {request.OrderId} was not found.");
+                .ToList()
+        };
     }
 }

@@ -1,8 +1,12 @@
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 using OrderProcessing.Api.BackgroundJobs;
+using OrderProcessing.Api.Configuration;
 using OrderProcessing.Api.Data.Seeding;
 using OrderProcessing.Api.Extensions;
+using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
 using OrderProcessing.Api.Services.Messaging;
@@ -132,6 +136,27 @@ namespace OrderProcessing.Api
                        options.EmailQueueName),
                "RabbitMQ email queue name is required when RabbitMQ is enabled.")
            .ValidateOnStart();
+
+
+            builder.Services
+                .AddOptions<MongoDbOptions>()
+                .Bind(builder.Configuration.GetSection(MongoDbOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString),
+                    "MongoDB connection string is required.")
+                .Validate(options => !string.IsNullOrWhiteSpace(options.DatabaseName),
+                    "MongoDB database name is required.")
+                .Validate(options => !string.IsNullOrWhiteSpace(options.OrdersCollectionName),
+                    "MongoDB orders collection name is required.")
+                .ValidateOnStart();
+
+            builder.Services.AddSingleton<IMongoClient>(serviceProvider =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<MongoDbOptions>>().Value;
+
+                return new MongoClient(options.ConnectionString);
+            });
+
+            builder.Services.AddSingleton<IOrderReadModelReader, MongoOrderReadModelReader>();
 
             var app = builder.Build();
 

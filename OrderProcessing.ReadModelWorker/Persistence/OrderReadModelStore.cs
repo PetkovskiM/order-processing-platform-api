@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using OrderProcessing.ReadModels.Orders;
 using OrderProcessing.ReadModelWorker.Configuration;
-using OrderProcessing.ReadModelWorker.ReadModels;
 
 namespace OrderProcessing.ReadModelWorker.Persistence;
 

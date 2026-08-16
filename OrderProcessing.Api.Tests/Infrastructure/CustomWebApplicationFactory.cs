@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestPlatform.TestHost;
 using OrderProcessing.Api.Data;
+using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
 using System.Data.Common;
 
 namespace OrderProcessing.Api.Tests.Infrastructure;
@@ -22,8 +23,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         _connection.Open();
     }
 
-    protected override void ConfigureWebHost(
-        IWebHostBuilder builder)
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
 
@@ -31,13 +31,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             // Remove the SQL Server DbContext registration
             // from the production application.
-            services.RemoveAll<
-                DbContextOptions<OrderProcessingDbContext>>();
+            services.RemoveAll<DbContextOptions<OrderProcessingDbContext>>();
 
             services.RemoveAll<OrderProcessingDbContext>();
 
-            services.RemoveAll<
-            IDbContextOptionsConfiguration<OrderProcessingDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<OrderProcessingDbContext>>();
 
             // All test DbContext instances use the same open
             // SQLite connection.
@@ -51,6 +49,10 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
                     options.UseSqlite(connection);
                 });
+
+            services.RemoveAll<IOrderReadModelReader>();
+
+            services.AddSingleton<IOrderReadModelReader, TestOrderReadModelReader>();
         });
     }
 
