@@ -69,11 +69,6 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task GetOrders_ReturnsPagedResponse()
     {
-        // Arrange
-        await CreateTestOrderAsync();
-        await CreateTestOrderAsync();
-        await CreateTestOrderAsync();
-
         // Act
         var response = await Client.GetAsync(
             "/api/orders?page=1&pageSize=2");
@@ -97,13 +92,6 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task GetOrders_WhenCustomerFilterProvided_ReturnsOnlyMatchingOrders()
     {
-        // Arrange
-        await CreateTestOrderAsync(
-            customerId: TestDataSeeder.CustomerId);
-
-        await CreateTestOrderAsync(
-            customerId: TestDataSeeder.SecondCustomerId);
-
         // Act
         var response = await Client.GetAsync(
             $"/api/orders?customerId={TestDataSeeder.SecondCustomerId}");

@@ -12,8 +12,7 @@ public sealed class TestOrderReadModelReader : IOrderReadModelReader
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var order = orderId == ExistingOrderId ? CreateExistingOrder() : null;
-
+        var order = CreateOrders().SingleOrDefault(order => order.OrderId == orderId);
         return Task.FromResult(order);
     }
 
@@ -21,10 +20,7 @@ public sealed class TestOrderReadModelReader : IOrderReadModelReader
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        IEnumerable<OrderReadModel> query =
-        [
-            CreateExistingOrder()
-        ];
+        IEnumerable<OrderReadModel> query = CreateOrders();
 
         query = ApplyFilters(query, parameters);
 
@@ -104,36 +100,97 @@ public sealed class TestOrderReadModelReader : IOrderReadModelReader
         };
     }
 
-    private static OrderReadModel CreateExistingOrder()
+    private static IReadOnlyList<OrderReadModel> CreateOrders()
     {
-        var occurredAtUtc = new DateTime(
-            2026,
-            8,
-            1,
-            10,
-            0,
-            0,
-            DateTimeKind.Utc);
+        return
+        [
+            CreateOrder(
+            orderId: ExistingOrderId,
+            customerId: TestDataSeeder.CustomerId,
+            customerName: "Integration Test Customer",
+            status: "Pending",
+            quantity: 1,
+            createdAtUtc: new DateTime(
+                2026,
+                8,
+                1,
+                10,
+                0,
+                0,
+                DateTimeKind.Utc)),
+
+        CreateOrder(
+            orderId: 88002,
+            customerId: TestDataSeeder.CustomerId,
+            customerName: "Integration Test Customer",
+            status: "Completed",
+            quantity: 2,
+            createdAtUtc: new DateTime(
+                2026,
+                8,
+                2,
+                10,
+                0,
+                0,
+                DateTimeKind.Utc),
+            completedAtUtc: new DateTime(
+                2026,
+                8,
+                2,
+                11,
+                0,
+                0,
+                DateTimeKind.Utc)),
+
+        CreateOrder(
+            orderId: 88003,
+            customerId: TestDataSeeder.SecondCustomerId,
+            customerName: "Second Integration Test Customer",
+            status: "Pending",
+            quantity: 3,
+            createdAtUtc: new DateTime(
+                2026,
+                8,
+                3,
+                10,
+                0,
+                0,
+                DateTimeKind.Utc))
+        ];
+    }
+
+    private static OrderReadModel CreateOrder(
+        int orderId,
+        int customerId,
+        string customerName,
+        string status,
+        int quantity,
+        DateTime createdAtUtc,
+        DateTime? completedAtUtc = null)
+    {
+        const decimal unitPrice = 24.99m;
 
         return new OrderReadModel
         {
-            OrderId = ExistingOrderId,
-            CustomerId = TestDataSeeder.CustomerId,
-            CustomerName = "Integration Test Customer",
-            Status = "Pending",
-            TotalAmount = 24.99m,
-            CreatedAtUtc = occurredAtUtc,
-            LastUpdatedAtUtc = occurredAtUtc,
+            OrderId = orderId,
+            CustomerId = customerId,
+            CustomerName = customerName,
+            Status = status,
+            TotalAmount = unitPrice * quantity,
+            CreatedAtUtc = createdAtUtc,
+            CompletedAtUtc = completedAtUtc,
+            LastUpdatedAtUtc =
+                completedAtUtc ?? createdAtUtc,
             Items =
             [
                 new OrderItemReadModel
-                {
-                    ProductId = TestDataSeeder.ProductId,
-                    ProductName = "Integration Test Product",
-                    Quantity = 1,
-                    UnitPrice = 24.99m,
-                    LineTotal = 24.99m
-                }
+            {
+                ProductId = TestDataSeeder.ProductId,
+                ProductName = "Integration Test Product",
+                Quantity = quantity,
+                UnitPrice = unitPrice,
+                LineTotal = unitPrice * quantity
+            }
             ]
         };
     }
