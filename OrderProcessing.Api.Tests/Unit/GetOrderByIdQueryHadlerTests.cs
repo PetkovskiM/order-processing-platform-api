@@ -1,4 +1,5 @@
-﻿using OrderProcessing.Api.Entities;
+﻿using OrderProcessing.Api.DTOs.Orders;
+using OrderProcessing.Api.Entities;
 using OrderProcessing.Api.Exceptions;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
@@ -83,6 +84,11 @@ namespace OrderProcessing.Api.Tests.Unit
             public Task<OrderReadModel?> GetByIdAsync(int orderId, CancellationToken cancellationToken)
             {
                 return Task.FromResult(_order?.OrderId == orderId ? _order : null);
+            }
+
+            public Task<OrderReadModelPage> GetPageAsync(OrderQueryParameters parameters, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new OrderReadModelPage([], 0));
             }
         }
     }
