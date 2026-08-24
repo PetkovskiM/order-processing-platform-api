@@ -69,9 +69,17 @@ public sealed class ApiIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task GetOrders_ReturnsPagedResponse()
     {
+<<<<<<< Updated upstream
+        // Act
+        var response = await Client.GetAsync(
+            "/api/orders?page=1&pageSize=2");
+=======
+        // Arrange
         var response = await Client.GetAsync("/api/orders?page=1&pageSize=2");
+>>>>>>> Stashed changes
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<OrderResponse>>();
+        var result = await response.Content
+            .ReadFromJsonAsync<PagedResponse<OrderResponse>>();
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

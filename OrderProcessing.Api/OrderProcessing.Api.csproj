@@ -1,9 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>0fe70da2-d2af-40ad-a4ae-4a1750f78e04</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +20,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
     <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
