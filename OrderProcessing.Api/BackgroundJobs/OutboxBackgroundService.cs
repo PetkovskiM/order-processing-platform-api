@@ -9,10 +9,7 @@ public sealed class OutboxBackgroundService : BackgroundService
     private readonly OutboxOptions _options;
     private readonly ILogger<OutboxBackgroundService> _logger;
 
-    public OutboxBackgroundService(
-        IServiceScopeFactory scopeFactory,
-        IOptions<OutboxOptions> options,
-        ILogger<OutboxBackgroundService> logger)
+    public OutboxBackgroundService(IServiceScopeFactory scopeFactory, IOptions<OutboxOptions> options, ILogger<OutboxBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;

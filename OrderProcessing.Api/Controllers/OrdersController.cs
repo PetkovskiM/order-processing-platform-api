@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OrderProcessing.Api.DTOs.Common;
 using OrderProcessing.Api.DTOs.Orders;
@@ -7,6 +8,7 @@ using OrderProcessing.Api.Features.Orders.Commands.CompleteOrder;
 using OrderProcessing.Api.Features.Orders.Commands.CreateOrder;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrderById;
 using OrderProcessing.Api.Features.Orders.Queries.GetOrders;
+using OrderProcessing.Api.Security;
 
 namespace OrderProcessing.Api.Controllers;
 
@@ -22,6 +24,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.WriteAccess)]
     public async Task<ActionResult<OrderResponse>> Create(
         CreateOrderRequest request,
         CancellationToken cancellationToken)
@@ -35,6 +38,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ReadAccess)]
     public async Task<ActionResult<PagedResponse<OrderResponse>>> GetAll(
      [FromQuery] OrderQueryParameters parameters,
      CancellationToken cancellationToken)
@@ -45,6 +49,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [Authorize(Policy = AuthorizationPolicies.ReadAccess)]
     public async Task<ActionResult<OrderResponse>> GetById(
         int id,
         CancellationToken cancellationToken)
@@ -55,6 +60,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPatch("{id:int}/complete")]
+    [Authorize(Policy = AuthorizationPolicies.WriteAccess)]
     public async Task<ActionResult<OrderResponse>> Complete(
     int id,
     CancellationToken cancellationToken)
@@ -65,6 +71,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPatch("{id:int}/cancel")]
+    [Authorize(Policy = AuthorizationPolicies.WriteAccess)]
     public async Task<ActionResult<OrderResponse>> Cancel(
         int id,
         CancellationToken cancellationToken)

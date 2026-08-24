@@ -7,6 +7,8 @@ using OrderProcessing.Api.Configuration;
 using OrderProcessing.Api.Data.Seeding;
 using OrderProcessing.Api.Extensions;
 using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
+using OrderProcessing.Api.OpenApi;
+using OrderProcessing.Api.Security;
 using OrderProcessing.Api.Services.Auditing;
 using OrderProcessing.Api.Services.Customers;
 using OrderProcessing.Api.Services.Messaging;
@@ -33,9 +35,15 @@ namespace OrderProcessing.Api
             // Add services to the container.
 
             builder.Services.AddControllers();
+            builder.Services.AddApiSecurity(builder.Configuration);
             builder.Services.AddCustomValidationResponse();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-            builder.Services.AddOpenApi();
+            builder.Services.AddOpenApi(options =>
+            {
+                options.AddDocumentTransformer<EntraOAuthDocumentTransformer>();
+
+                options.AddOperationTransformer<AuthorizationOperationTransformer>();
+            });
 
             builder.Services.AddDbContext<Data.OrderProcessingDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -178,18 +186,34 @@ namespace OrderProcessing.Api
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
-                app.MapOpenApi();
+                app.MapOpenApi().AllowAnonymous();
+
+                var apiClientId =app.Configuration["AzureAd:ClientId"] ?? throw new InvalidOperationException("AzureAd:ClientId is required.");
+
+                var swaggerClientId = app.Configuration["SwaggerOAuth:ClientId"] ?? throw new InvalidOperationException("SwaggerOAuth:ClientId is required.");
+
+                var readScope = $"api://{apiClientId}/{ApiScopes.Read}";
+
+                var writeScope = $"api://{apiClientId}/{ApiScopes.Write}";
 
                 app.UseSwaggerUI(options =>
                 {
                     options.SwaggerEndpoint("/openapi/v1.json", "Order Processing API v1");
+
+                    options.OAuthClientId(swaggerClientId);
+                    options.OAuthAppName("Order Processing API - Swagger");
+
+                    options.OAuthScopes(readScope, writeScope);
+
+                    options.OAuthUsePkce();
                 });
             }
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
+            app.UseAuthentication();
 
+            app.UseAuthorization();
 
             app.MapControllers();
 

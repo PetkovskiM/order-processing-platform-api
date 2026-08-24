@@ -12,7 +12,7 @@ public abstract class IntegrationTestBase : IDisposable
     protected IntegrationTestBase()
     {
         Factory = new CustomWebApplicationFactory();
-        Client = Factory.CreateClient();
+        Client = Factory.CreateAuthenticatedClient();
     }
 
     public void Dispose()

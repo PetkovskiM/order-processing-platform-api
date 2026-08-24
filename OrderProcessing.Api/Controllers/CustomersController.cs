@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using OrderProcessing.Api.DTOs.Customers;
+using OrderProcessing.Api.Security;
 using OrderProcessing.Api.Services.Customers;
 
 namespace OrderProcessing.Api.Controllers;
@@ -16,6 +18,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.WriteAccess)]
     public async Task<ActionResult<CustomerResponse>> Create(
         CreateCustomerRequest request,
         CancellationToken cancellationToken)
@@ -29,6 +32,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ReadAccess)]
     public async Task<ActionResult<IReadOnlyList<CustomerResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
@@ -38,6 +42,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [Authorize(Policy = AuthorizationPolicies.ReadAccess)]
     public async Task<ActionResult<CustomerResponse>> GetById(
         int id,
         CancellationToken cancellationToken)

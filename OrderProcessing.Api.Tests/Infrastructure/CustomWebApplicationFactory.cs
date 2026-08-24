@@ -1,14 +1,17 @@
-﻿using Microsoft.AspNetCore.Hosting;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestPlatform.TestHost;
 using OrderProcessing.Api.Data;
 using OrderProcessing.Api.Features.Orders.Queries.ReadModel;
+using OrderProcessing.Api.Security;
 using System.Data.Common;
 
 namespace OrderProcessing.Api.Tests.Infrastructure;
@@ -26,6 +29,23 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration(
+    (_, configuration) =>
+    {
+        configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["AzureAd:Instance"] =
+                    "https://login.microsoftonline.com/",
+
+                ["AzureAd:TenantId"] =
+                    "00000000-0000-0000-0000-000000000001",
+
+                ["AzureAd:ClientId"] =
+                    "00000000-0000-0000-0000-000000000002"
+            });
+    });
 
         builder.ConfigureServices(services =>
         {
@@ -53,7 +73,18 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IOrderReadModelReader>();
 
             services.AddSingleton<IOrderReadModelReader, TestOrderReadModelReader>();
-        });
+
+            services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
+
+                options.DefaultChallengeScheme = TestAuthenticationHandler.SchemeName;
+            })
+            .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                    TestAuthenticationHandler.SchemeName, _ => { });
+            });
+
     }
 
     protected override IHost CreateHost(
@@ -81,5 +112,53 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             _connection.Dispose();
         }
+    }
+
+    public HttpClient CreateAuthenticatedClient()
+    {
+        return CreateClientWithScopes(ApiScopes.Read, ApiScopes.Write);
+    }
+
+    public HttpClient CreateClientWithScopes(
+        params string[] scopes)
+    {
+        var client = CreateClient();
+
+        AddTestUser(client);
+
+        if (scopes.Length > 0)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthenticationHandler.ScopesHeaderName, string.Join(' ', scopes));
+        }
+
+        return client;
+    }
+
+    public HttpClient CreateClientWithRoles(params string[] roles)
+    {
+        var client = CreateClient();
+
+        AddTestUser(client);
+
+        if (roles.Length > 0)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthenticationHandler.RolesHeaderName, string.Join(' ', roles));
+        }
+
+        return client;
+    }
+
+    public HttpClient CreateAuthenticatedClientWithoutPermissions()
+    {
+        var client = CreateClient();
+
+        AddTestUser(client);
+
+        return client;
+    }
+
+    private static void AddTestUser(HttpClient client)
+    {
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.UserHeaderName, "integration-test-user");
     }
 }
