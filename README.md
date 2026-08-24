@@ -2,480 +2,356 @@
 
 [![CI](https://github.com/PetkovskiM/order-processing-platform-api/actions/workflows/ci.yml/badge.svg)](https://github.com/PetkovskiM/order-processing-platform-api/actions/workflows/ci.yml)
 
-A portfolio and learning project built with ASP.NET Core Web API and Entity Framework Core.
+A production-style order-processing backend built with .NET 10. The project goes beyond CRUD to demonstrate transactional business workflows, CQRS, reliable asynchronous messaging, a MongoDB read model, Microsoft Entra ID security, automated testing, and continuous integration.
 
-The application demonstrates practical backend-development concepts commonly expected from a mid-level .NET developer, including REST API design, relational data modeling, business-rule validation, transactions, structured logging, background processing, CQRS, automated testing, and continuous integration.
+The system manages customers, products, inventory, and order lifecycles. SQL Server is the source of truth for writes, while order queries are served from an asynchronously maintained MongoDB read model.
 
-## Project Goals
+## Highlights
 
-The project was created to practise building a business-oriented API rather than a basic CRUD demonstration.
-
-Its main goals are to demonstrate:
-
-* Clean and maintainable ASP.NET Core code
-* RESTful endpoint design
-* EF Core relationships and Fluent API configuration
-* Business rules and transaction management
-* Consistent API error responses
-* Structured application logging
-* Audit logging
-* Background processing
-* CQRS and MediatR
-* Unit and integration testing
-* GitHub-based feature development and continuous integration
-
-## Technology Stack
-
-* .NET 10
-* ASP.NET Core Web API
-* Entity Framework Core
-* SQL Server
-* SQLite in-memory database for integration tests
-* MediatR
-* Serilog
-* `Channel<T>` and `BackgroundService`
-* xUnit
-* `WebApplicationFactory`
-* GitHub Actions
-* Swagger / OpenAPI
-
-## Main Features
-
-### Customer Management
-
-The API supports creating, reading, updating, and deleting customers.
-
-Customer email addresses are protected by both application validation and a unique database index.
-
-### Product Management
-
-The API supports creating, reading, updating, and deleting products.
-
-Products contain:
-
-* SKU
-* Name
-* Description
-* Price
-* Available stock
-* Creation and update timestamps
-
-SKU values are protected by a unique database index.
-
-### Order Creation
-
-Creating an order includes several business rules:
-
-* The customer must exist.
-* Every product must exist.
-* Product IDs cannot be duplicated within the same request.
-* Quantities must be greater than zero.
-* Sufficient stock must be available.
-* Product names and prices are stored as order-item snapshots.
-* Stock is reduced when the order is created.
-* The total amount is calculated by the application.
-* An audit entry is created.
-* The operation is executed inside an EF Core transaction.
-
-### Order Lifecycle
-
-An order can move from `Pending` to:
-
-* `Completed`
-* `Cancelled`
-
-Completed or cancelled orders cannot be changed to another final status.
-
-Cancelling a pending order restores the reserved product stock.
-
-### Filtering, Sorting and Pagination
-
-The order-list endpoint supports:
-
-* Pagination
-* Customer filtering
-* Status filtering
-* Creation-date filtering
-* Sorting
-* Deterministic secondary ordering
-
-Responses contain pagination metadata such as:
-
-* Current page
-* Page size
-* Total record count
-* Total pages
-* Previous-page availability
-* Next-page availability
-
-### Consistent Error Responses
-
-The API uses centralized exception handling and returns RFC-style `ProblemDetails` responses.
-
-Error responses include:
-
-* HTTP status
-* Error title
-* Error details
-* Application error code
-* Trace identifier
-* UTC timestamp
-* Validation errors when applicable
-
-### Structured Logging
-
-Serilog is used for:
-
-* HTTP request logging
-* Order lifecycle events
-* Business-operation logging
-* Background email processing
-* Error diagnostics
-
-Structured properties such as `OrderId`, `CustomerId`, and `Recipient` are logged separately instead of being embedded only inside plain text.
-
-### Audit Logging
-
-Order creation, completion, and cancellation produce audit records.
-
-Audit entries include:
-
-* Entity name
-* Entity ID
-* Action
-* Previous values
-* New values
-* UTC timestamp
-
-The audit service adds audit entities to the shared EF Core unit of work, while the calling application service or handler controls `SaveChangesAsync` and transaction boundaries.
-
-### Background Email Processing
-
-Order-created and order-completed notifications are placed into a bounded in-memory queue implemented with `Channel<EmailMessage>`.
-
-A hosted `BackgroundService` consumes queued messages and resolves the scoped email sender through a dependency-injection scope.
-
-Current flow:
-
-```text
-HTTP request
-    ↓
-Persist order changes
-    ↓
-Queue email message
-    ↓
-Return API response
-
-Background worker
-    ↓
-Dequeue message
-    ↓
-Send or simulate email
-```
-
-The current email sender writes structured logs instead of contacting a real email provider.
-
-The in-memory queue improves request latency but is not durable. Messages can be lost if the API stops before processing them.
-
-A future production design would use:
-
-* Transactional outbox
-* RabbitMQ or another external broker
-* Separate worker process
-* Retries
-* Dead-letter queue
-* Idempotent message processing
+- RESTful ASP.NET Core API with DTO validation and consistent `ProblemDetails` errors
+- Transactional order creation, inventory updates, audit records, and outbox messages
+- CQRS-style order commands and queries implemented with MediatR
+- Transactional outbox publisher with retry tracking and RabbitMQ publisher confirms
+- Durable RabbitMQ topic exchange, quorum queues, manual acknowledgements, delayed retries, and dead-letter queues
+- Separate email and read-model worker processes
+- Idempotent email consumption backed by a SQL inbox table
+- MongoDB order projections with filtering, sorting, pagination, indexes, and stale-event protection
+- JWT bearer authentication with Microsoft Entra ID
+- Scope- and role-based authorization policies for read and write access
+- OAuth 2.0 Authorization Code flow with PKCE in Swagger UI
+- Unit and integration tests with xUnit, `WebApplicationFactory`, and SQLite in-memory databases
+- GitHub Actions CI for restore, build, test, and test-result publishing
 
 ## Architecture
 
-The API currently uses a pragmatic hybrid architecture.
+```mermaid
+flowchart TB
+    ENTRA[Microsoft Entra ID] -->|Issues JWT access token| CLIENT[Client or Swagger UI]
+    CLIENT -->|Authenticated REST request| API[ASP.NET Core Web API]
 
-### Service-Based Features
+    API -->|Commands and transactions| WRITE[(SQL Server<br/>Orders, inventory, audit)]
+    API -->|Outbox row in same unit of work| OUTBOX[(SQL Server<br/>OutboxMessages)]
+    API -->|Order queries| MONGO[(MongoDB<br/>Order read model)]
 
-Customer, product, and some order operations use:
+    OUTBOX -->|Poll unpublished events| PUBLISHER[Outbox background publisher]
+    PUBLISHER -->|Persistent message and publisher confirm| EXCHANGE{RabbitMQ topic exchange}
 
-```text
-Controller
-    ↓
-Application service
-    ↓
-EF Core DbContext
-    ↓
-SQL Server
+    EXCHANGE -->|order.created / completed / cancelled| EMAILQ[[Email quorum queue]]
+    EXCHANGE -->|order.created / completed / cancelled| READQ[[Read-model quorum queue]]
+
+    EMAILQ -->|Deliver; worker ACKs after success| EMAILWORKER[Email worker]
+    EMAILWORKER -->|Duplicate check and processed MessageId| INBOX[(SQL Server<br/>email.ProcessedMessages)]
+    EMAILWORKER -->|SMTP through MailKit| PROVIDER[Email provider]
+
+    READQ -->|Deliver; worker ACKs after success| READWORKER[Read-model worker]
+    READWORKER -->|Idempotent projection| MONGO
+
+    EMAILWORKER -. Permanent failure or delivery limit .-> DLQ[[Dead-letter queues]]
+    READWORKER -. Permanent failure or delivery limit .-> DLQ
 ```
 
-### CQRS Features
+### Write and event flow
 
-Selected order operations use MediatR and dedicated handlers:
+1. The API validates the authenticated request and executes an order command through MediatR.
+2. EF Core updates the order, inventory, and audit data in SQL Server.
+3. The corresponding integration event is stored in `OutboxMessages` as part of the same database unit of work.
+4. `OutboxBackgroundService` polls pending messages and publishes them to the RabbitMQ topic exchange.
+5. RabbitMQ routes each event independently to the email and read-model queues.
+6. Workers acknowledge messages only after successful processing. Permanent failures are dead-lettered, while transient failures are retried up to the queue delivery limit.
 
-```text
-Controller
-    ↓
-ISender
-    ↓
-Command or query handler
-    ↓
-EF Core DbContext
-```
+### Read flow and consistency model
 
-Current CQRS slices include:
+Order commands use SQL Server as the write model. `OrderCreated`, `OrderCompleted`, and `OrderCancelled` events are projected into MongoDB by `OrderProcessing.ReadModelWorker`, and order queries read from that projection.
 
-* `GetOrderByIdQuery`
-* `CompleteOrderCommand`
+This is an intentionally eventually consistent CQRS design: a successful order command can be visible in SQL Server before the MongoDB read model has processed its event. An immediate `GET /api/orders/{id}` can therefore briefly return the previous state or `404 Not Found`.
 
-The query handler uses `AsNoTracking` and DTO projection.
-
-The command handler loads tracked entities, validates business rules, updates state, creates an audit entry, saves changes, and queues an email.
-
-This incremental approach demonstrates CQRS without forcing unnecessary abstraction onto every simple CRUD operation.
+Customer and product features use a pragmatic controller-service-EF Core flow. CQRS is applied where it adds learning and architectural value rather than being forced onto every CRUD operation.
 
 ## Project Structure
 
 ```text
 OrderProcessingPlatform
-│
-├── OrderProcessing.Api
-│   ├── BackgroundJobs
-│   ├── Controllers
-│   ├── Data
-│   ├── DTOs
-│   ├── Entities
-│   ├── Exceptions
-│   ├── Features
-│   │   └── Orders
-│   │       ├── Commands
-│   │       │   └── CompleteOrder
-│   │       └── Queries
-│   │           └── GetOrderById
-│   ├── Middleware
-│   ├── Services
-│   │   ├── Auditing
-│   │   ├── Customers
-│   │   ├── Emailing
-│   │   ├── Orders
-│   │   └── Products
-│   └── Validation
-│
-├── tests
-│   └── OrderProcessing.Api.Tests
-│       ├── Infrastructure
-│       ├── Integration
-│       └── Unit
-│
-└── .github
-    └── workflows
-        └── ci.yml
+|
+|-- OrderProcessing.Api
+|   |-- Controllers                 HTTP endpoints
+|   |-- Features/Orders             MediatR commands and queries
+|   |-- Services/Outbox             Outbox writer and processor
+|   |-- Services/Messaging          RabbitMQ publisher and topology
+|   |-- Security                    Entra scopes, roles, policies, handler
+|   |-- OpenApi                     OAuth and authorization metadata
+|   |-- Data                        EF Core DbContext, mappings, migrations
+|   `-- Middleware                  Global exception handling
+|
+|-- OrderProcessing.Contracts       Shared integration-event contracts
+|-- OrderProcessing.ReadModels      Shared MongoDB projection models
+|-- OrderProcessing.EmailWorker     RabbitMQ consumer and email delivery
+|-- OrderProcessing.ReadModelWorker RabbitMQ-to-MongoDB projection worker
+|
+|-- OrderProcessing.Api.Tests
+|-- OrderProcessing.EmailWorker.Tests
+`-- OrderProcessing.ReadModelWorker.Tests
 ```
 
-## Running the Application
+## Technology Stack
 
-### Prerequisites
+| Area | Technologies |
+| --- | --- |
+| API | .NET 10, ASP.NET Core Web API, OpenAPI/Swagger |
+| Application flow | MediatR, CQRS-style vertical slices, dependency injection |
+| Write persistence | EF Core, SQL Server, explicit transactions |
+| Read persistence | MongoDB Driver, MongoDB read-model projections |
+| Messaging | RabbitMQ topic exchange, quorum queues, publisher confirms, manual acknowledgements, retries, DLQs |
+| Background processing | ASP.NET Core `BackgroundService`, `PeriodicTimer`, separate Worker Service projects |
+| Email | MailKit SMTP sender with a logging fallback |
+| Security | Microsoft Entra ID, OAuth 2.0, JWT bearer authentication, scopes, app roles, policy-based authorization |
+| Observability | Serilog request and structured application logging, audit records |
+| Testing | xUnit, `WebApplicationFactory`, SQLite in-memory, test authentication handler |
+| CI | GitHub Actions |
 
-Install:
+## Main Capabilities
 
-* .NET 10 SDK
-* SQL Server or SQL Server LocalDB
+### Order lifecycle and business rules
 
+- Validates that the customer and every requested product exist
+- Rejects duplicate product IDs and non-positive quantities
+- Checks available stock and decreases it during order creation
+- Stores product name and price snapshots on order items
+- Calculates line totals and the complete order total
+- Allows only `Pending -> Completed` or `Pending -> Cancelled` transitions
+- Restores product stock when a pending order is cancelled
+- Writes audit records for creation, completion, and cancellation
+- Stores an integration event in the outbox together with the business change
 
-### Apply Migrations
+Order creation uses an explicit EF Core transaction because it performs multiple saves while keeping the order, stock, audit record, and outbox event atomic. Completion and cancellation persist their state change, audit record, and outbox event through one `SaveChangesAsync` unit of work.
 
-```bash
-dotnet ef database update --project OrderProcessing.Api
-```
+### Reliable asynchronous messaging
+
+The outbox removes the SQL/RabbitMQ dual-write gap: a committed business change cannot be left without a durable event record because both are saved in SQL Server.
+
+The publisher provides:
+
+- Configurable polling interval, batch size, and retry count
+- Persistent AMQP messages
+- RabbitMQ publisher confirmations
+- Mandatory routing
+- Automatic connection and topology recovery
+- Structured success and failure logging
+
+The consumers provide:
+
+- Durable topic bindings for `order.created`, `order.completed`, and `order.cancelled`
+- Quorum queues with bounded delivery attempts
+- Delayed retry queue arguments
+- Manual `ACK` after successful processing
+- Requeue for transient failures
+- Dead-lettering for invalid or exhausted messages
+- Prefetch and single-dispatch processing for controlled concurrency
+
+### Email worker
+
+`OrderProcessing.EmailWorker` consumes order events and sends created, completed, and cancelled notifications. It can use a real SMTP provider through MailKit or a logging sender for local development.
+
+Processed RabbitMQ `MessageId` values are stored in the `email.ProcessedMessages` SQL table. Redelivered messages that were already recorded are skipped, providing idempotent handling for successfully completed deliveries.
+
+### MongoDB read model
+
+`OrderProcessing.ReadModelWorker` builds a denormalized `orders` collection containing the customer summary, item snapshots, totals, lifecycle timestamps, and last event timestamp.
+
+The projection uses:
+
+- Upsert/`SetOnInsert` handling for duplicate creation events
+- Event timestamps to ignore stale status updates
+- Indexes on `CreatedAtUtc`, `(CustomerId, CreatedAtUtc)`, and `(Status, CreatedAtUtc)`
+- Server-side filtering, sorting, pagination, and counting
+
+### Security
+
+The API validates Microsoft Entra ID JWT access tokens through `Microsoft.Identity.Web`. A fallback authorization policy requires authentication for all endpoints unless they explicitly opt out.
+
+| Policy | Accepted delegated scopes | Accepted app role |
+| --- | --- | --- |
+| `ReadAccess` | `OrderProcessing.Read` or `OrderProcessing.Write` | `OrderProcessing.Admin` |
+| `WriteAccess` | `OrderProcessing.Write` | `OrderProcessing.Admin` |
+
+The health endpoint is anonymous. The OpenAPI document is also anonymous in Development so that Swagger UI can start the OAuth Authorization Code flow with PKCE. Runtime authorization policies remain the source of truth for endpoint protection.
+
+### API quality
+
+- Centralized exception handling with RFC-style `ProblemDetails`
+- Application error codes, validation details, trace IDs, and UTC timestamps
+- Data annotations plus custom non-whitespace validation
+- EF Core Fluent API mappings, constraints, indexes, and delete behaviors
+- DTO projection rather than returning persistence entities
+- Structured Serilog properties such as `OrderId` and `CustomerId`
+- Cancellation-token propagation across API and persistence operations
 
 ## API Endpoints
 
-### Customers
+| Method | Route | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | Anonymous | Application health response |
+| `GET` | `/api/customers` | Read | List customers |
+| `GET` | `/api/customers/{id}` | Read | Get a customer |
+| `POST` | `/api/customers` | Write | Create a customer |
+| `GET` | `/api/products` | Read | List products |
+| `GET` | `/api/products/{id}` | Read | Get a product |
+| `POST` | `/api/products` | Write | Create a product |
+| `PUT` | `/api/products/{id}` | Write | Update a product |
+| `GET` | `/api/orders` | Read | Filtered, sorted, paged order read model |
+| `GET` | `/api/orders/{id}` | Read | Get one order from the read model |
+| `POST` | `/api/orders` | Write | Create an order |
+| `PATCH` | `/api/orders/{id}/complete` | Write | Complete a pending order |
+| `PATCH` | `/api/orders/{id}/cancel` | Write | Cancel a pending order and restore stock |
 
-```text
-GET    /api/customers
-GET    /api/customers/{id}
-POST   /api/customers
-PUT    /api/customers/{id}
-DELETE /api/customers/{id}
+Order-list query parameters include `page`, `pageSize`, `customerId`, `status`, `createdFromUtc`, `createdToUtc`, `sortBy`, and `sortDirection`. The maximum page size is 100.
+
+## Getting Started
+
+### Prerequisites
+
+- .NET 10 SDK
+- SQL Server or SQL Server LocalDB
+- RabbitMQ with the management UI recommended for inspecting exchanges, queues, and dead letters
+- MongoDB, locally installed or running in Docker
+- A Microsoft Entra tenant with separate API and Swagger client registrations
+- Optional SMTP account for real email delivery
+
+### 1. Clone and restore
+
+```bash
+git clone https://github.com/PetkovskiM/order-processing-platform-api.git
+cd order-processing-platform-api
+dotnet restore OrderProcessingPlatform.slnx
 ```
 
-### Products
+### 2. Start RabbitMQ and MongoDB
 
-```text
-GET    /api/products
-GET    /api/products/{id}
-POST   /api/products
-PUT    /api/products/{id}
-DELETE /api/products/{id}
+Example local Docker containers:
+
+```bash
+docker volume create order-processing-rabbitmq-data
+docker run -d --name order-processing-rabbitmq \
+  -p 5672:5672 -p 15672:15672 \
+  -v order-processing-rabbitmq-data:/var/lib/rabbitmq \
+  rabbitmq:4-management
+
+docker volume create order-processing-mongodb-data
+docker run -d --name order-processing-mongodb \
+  -p 27017:27017 \
+  -v order-processing-mongodb-data:/data/db \
+  mongo:8
 ```
 
-### Orders
+Default local addresses are:
 
-```text
-GET   /api/orders
-GET   /api/orders/{id}
-POST  /api/orders
-PATCH /api/orders/{id}/complete
-PATCH /api/orders/{id}/cancel
+- RabbitMQ AMQP: `localhost:5672`
+- RabbitMQ management UI: `http://localhost:15672`
+- MongoDB: `mongodb://localhost:27017`
+
+### 3. Apply SQL Server migrations
+
+```bash
+dotnet ef database update --project OrderProcessing.Api
+dotnet ef database update --project OrderProcessing.EmailWorker
 ```
 
-### Diagnostics
+The API migrations create the transactional write model, audit log, and outbox. The email-worker migrations create the `email.ProcessedMessages` inbox table.
 
-```text
-GET /api/health
+### 4. Configure Microsoft Entra ID
+
+The Entra setup uses:
+
+1. A protected Web API registration exposing `OrderProcessing.Read` and `OrderProcessing.Write` scopes and the `OrderProcessing.Admin` app role.
+2. A Swagger client registration with the redirect URI `https://localhost:7101/swagger/oauth2-redirect.html` and delegated permission to the API scopes.
+
+Store identifiers outside source control:
+
+```bash
+dotnet user-secrets set "AzureAd:TenantId" "<tenant-id>" --project OrderProcessing.Api
+dotnet user-secrets set "AzureAd:ClientId" "<api-client-id>" --project OrderProcessing.Api
+dotnet user-secrets set "SwaggerOAuth:ClientId" "<swagger-client-id>" --project OrderProcessing.Api
 ```
 
+### 5. Configure email delivery
 
-The test suite includes:
+To use SMTP in Development, configure the email-worker secrets:
 
-### Unit Tests
+```bash
+dotnet user-secrets set "Email:UserName" "<smtp-user>" --project OrderProcessing.EmailWorker
+dotnet user-secrets set "Email:Password" "<smtp-password-or-app-password>" --project OrderProcessing.EmailWorker
+dotnet user-secrets set "Email:FromAddress" "<from-address>" --project OrderProcessing.EmailWorker
+```
 
-Unit tests cover isolated logic such as:
+Set `Email:UseSmtp` to `false` to use the logging sender without contacting a real provider:
 
-* Custom whitespace validation
-* Pagination metadata calculations
+```bash
+dotnet user-secrets set "Email:UseSmtp" "false" --project OrderProcessing.EmailWorker
+```
 
-### Integration Tests
+### 6. Run the processes
 
-Integration tests use `WebApplicationFactory` to start the real ASP.NET Core application pipeline.
+Start each project in its own terminal:
 
-The production SQL Server registration is replaced with an open SQLite in-memory database.
+```bash
+dotnet run --project OrderProcessing.Api
+dotnet run --project OrderProcessing.EmailWorker
+dotnet run --project OrderProcessing.ReadModelWorker
+```
 
-Integration tests cover:
+Swagger UI is available in Development at `https://localhost:7101/swagger`.
 
-* Health endpoint
-* Model validation
-* Consistent error responses
-* Missing resources
-* Order creation
-* Stock reduction
-* Response status codes
-* Response headers
-* Database changes
+## Testing
 
-The SQLite connection remains open for the test-host lifetime so the in-memory database is retained while tests execute.
+Run the complete test suite:
+
+```bash
+dotnet test OrderProcessingPlatform.slnx
+```
+
+The tests cover:
+
+- Order creation, stock reduction, cancellation stock restoration, and lifecycle rules
+- Audit and outbox persistence for created, completed, and cancelled orders
+- Outbox serialization, publishing success, and retry recording
+- MongoDB read-model query mapping through a test reader
+- Read-model projection handling for all order event types
+- Email idempotency and failure behavior
+- RabbitMQ routing-key mapping
+- Pagination and validation helpers
+- Authentication and authorization behavior
+- HTTP status codes, headers, validation errors, and consistent `ProblemDetails`
+
+API integration tests boot the real ASP.NET Core pipeline with `WebApplicationFactory`, replace SQL Server with an open SQLite in-memory database, replace the MongoDB reader with an in-memory test implementation, and use a test authentication handler. The worker tests isolate their event handlers and persistence behavior without requiring live RabbitMQ, MongoDB, SMTP, or Entra services.
 
 ## Continuous Integration
 
-GitHub Actions automatically performs:
+The GitHub Actions workflow runs on pushes to `main` and pull requests targeting `main`:
 
 ```text
-Restore
-→ Release build
-→ Unit tests
-→ Integration tests
-→ Test-result upload
+Restore -> Release build -> Test -> Upload TRX results
 ```
 
-The workflow runs for:
-
-* Pull requests targeting `main`
-* Pushes to `main`
-
-A failed build or test causes the workflow to fail.
+Any build or test failure fails the workflow.
 
 ## Important Design Decisions
 
-### DbContext as Unit of Work
+- **EF Core `DbContext` as unit of work:** no generic repository wrapper was added over `DbSet<T>` because EF Core already provides tracking, querying, transactions, and change persistence.
+- **Hybrid architecture:** simple customer and product features use application services; order workflows use MediatR commands and queries.
+- **Transactional outbox:** business data and integration events are stored together before RabbitMQ publishing, avoiding the dual-write problem.
+- **At-least-once messaging:** consumers are designed for possible redelivery and acknowledge only after successful processing.
+- **CQRS read model:** SQL Server remains authoritative for writes, while MongoDB provides denormalized order queries with eventual consistency.
+- **Separate worker processes:** email delivery and read-model projection can fail or scale independently of the HTTP API.
+- **Entra-based authorization:** endpoint access is expressed as policies that understand both delegated scopes and app roles.
 
-EF Core’s `DbContext` tracks changes across multiple entities and persists them through one `SaveChangesAsync` call.
+## Current Scope and Future Improvements
 
-It therefore acts as the unit of work for this application.
+The current feature set is intentionally complete for the project's portfolio. Valuable production-oriented extensions would include:
 
-Separate generic repository abstractions were not added because EF Core already provides repository-like access through `DbSet<T>` and supports queries, tracking, transactions, and change persistence directly.
-
-### Projection for Read Operations
-
-Read-only endpoints use:
-
-```csharp
-AsNoTracking()
-```
-
-and project directly to response DTOs.
-
-This avoids unnecessary entity tracking and prevents exposing EF Core entities as API contracts.
-
-### Explicit Transactions for Multi-Step Workflows
-
-Order creation uses an explicit transaction because it includes:
-
-* Order creation
-* Order-item creation
-* Stock updates
-* Audit logging
-* Multiple save operations
-
-If any required step fails before the transaction commits, the complete operation is rolled back.
-
-### Database Constraints as Final Protection
-
-Application validation provides useful error messages, but the database remains the final consistency boundary.
-
-The model includes:
-
-* Unique indexes
-* Required columns
-* Foreign keys
-* Delete behaviors
-* Decimal precision
-* Check constraints
-
-### Email as a Secondary Side Effect
-
-An order is considered successfully created or completed when the database operation succeeds.
-
-Email queue failures are logged but do not convert an already committed business operation into a misleading HTTP failure response.
-
-For guaranteed notification delivery, the next architectural step would be the transactional outbox pattern.
-
-## Current Limitations
-
-The current implementation intentionally has several limitations:
-
-* Email delivery is simulated through logging.
-* The in-memory email queue is not durable.
-* RabbitMQ is designed but not yet implemented.
-* The transactional outbox is not yet implemented.
-* CQRS is applied only to selected order use cases.
-* SQLite integration tests do not guarantee complete SQL Server provider parity.
-* Demo seed data should be separated from production and test initialization before a real production release.
-* Authentication and authorization are not yet implemented.
-
-## Planned Improvements
-
-Potential next steps include:
-
-1. Move integration-test data to a dedicated test seeder.
-2. Move development demo data out of model-managed production seeding.
-3. Complete the CQRS migration for all order operations.
-4. Add FluentValidation through a MediatR pipeline behavior.
-5. Add transactional outbox storage.
-6. Add RabbitMQ and a separate email worker.
-7. Add retry and dead-letter handling.
-8. Add idempotent message consumption.
-9. Add authentication and authorization.
-10. Add Docker support.
-11. Add SQL Server-based integration tests.
-12. Deploy the API to a cloud platform.
-13. Add metrics and distributed tracing.
-
-## Interview Summary
-
-This project demonstrates how I approach a business-oriented ASP.NET Core API.
-
-I use controllers as the HTTP boundary and keep business rules in application services or CQRS handlers. EF Core handles relational persistence, change tracking, and transaction management. Read operations use `AsNoTracking` and DTO projection, while commands use tracked entities and explicit transactions where multiple related operations must succeed together.
-
-The API has centralized validation and exception handling, structured Serilog logging, audit records, pagination and filtering, asynchronous background email processing, MediatR-based command and query handlers, automated unit and integration tests, and a GitHub Actions continuous-integration workflow.
-
-I also understand the current architectural limitations. The in-memory channel is not durable, and directly publishing after a database commit would create a dual-write problem. For stronger production reliability, I would use a transactional outbox, RabbitMQ, a separate worker, manual acknowledgements, retries, dead-lettering, and idempotent consumers.
-
-## Project Status
-
-The initial implementation roadmap is complete.
-
-The project now provides a strong foundation for further work in:
-
-* Distributed messaging
-* Cloud deployment
-* Security
-* Advanced testing
-* SQL optimization
-* Observability
-* Scalable architecture
+1. Docker Compose for one-command startup of the API, workers, SQL Server, RabbitMQ, and MongoDB.
+2. Testcontainers integration tests against real SQL Server, RabbitMQ, and MongoDB providers.
+3. Optimistic concurrency handling for high-contention inventory updates.
+4. Outbox leasing/locking for safe multi-instance publishing, plus processed-message cleanup or archival.
+5. Read-model rebuild/replay tooling and stronger recovery for out-of-order events.
+6. OpenTelemetry traces, metrics, dependency health checks, dashboards, and cross-service correlation.
+7. API versioning, rate limiting, and broader authorization test coverage.
+8. Cloud deployment with managed secrets, databases, messaging, and environment-specific configuration.
